@@ -7,6 +7,7 @@ import { format, isToday, parseISO } from 'date-fns';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   SafeAreaView,
   ScrollView,
@@ -18,13 +19,42 @@ import {
 
 export default function EntryDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { entries, deleteEntry } = useEntriesStore();
+  const { entries, deleteEntry, fetchEntryById } = useEntriesStore();
   const [entry, setEntry] = useState<Entry | null>(null);
+  const [isFetchingEntry, setIsFetchingEntry] = useState(true);
 
   useEffect(() => {
-    const found = entries.find((e) => e.id === id);
-    setEntry(found || null);
-  }, [id, entries]);
+    let isMounted = true;
+
+    const loadEntry = async () => {
+      if (!id) {
+        setEntry(null);
+        setIsFetchingEntry(false);
+        return;
+      }
+
+      const found = entries.find((e) => e.id === id);
+      if (found) {
+        setEntry(found);
+        setIsFetchingEntry(false);
+        return;
+      }
+
+      setIsFetchingEntry(true);
+      const fetched = await fetchEntryById(id);
+
+      if (isMounted) {
+        setEntry(fetched);
+        setIsFetchingEntry(false);
+      }
+    };
+
+    loadEntry();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [id, entries, fetchEntryById]);
 
   const handleDelete = () => {
     Alert.alert(
@@ -45,6 +75,17 @@ export default function EntryDetailScreen() {
       ]
     );
   };
+
+  if (isFetchingEntry) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.notFound}>
+          <ActivityIndicator color={colors.primary[600]} />
+          <Text style={styles.loadingText}>Loading entry...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!entry) {
     return (
@@ -248,5 +289,10 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.lg,
     color: colors.text.secondary,
     marginBottom: spacing.lg,
+  },
+  loadingText: {
+    fontSize: typography.sizes.md,
+    color: colors.text.secondary,
+    marginTop: spacing.md,
   },
 });

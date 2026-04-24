@@ -2,44 +2,70 @@ import { CreateEntryInput, Entry, UpdateEntryInput } from '@/types';
 import { format } from 'date-fns';
 import { supabase } from '../supabase';
 
+async function getCurrentUserId(): Promise<string> {
+  const { data: { user }, error } = await supabase.auth.getUser();
+
+  if (error) throw error;
+  if (!user) throw new Error('Not authenticated');
+
+  return user.id;
+}
+
 export async function getTodayEntry(): Promise<Entry | null> {
+  const userId = await getCurrentUserId();
   const today = format(new Date(), 'yyyy-MM-dd');
 
   const { data, error } = await supabase
     .from('entries')
     .select('*')
+    .eq('user_id', userId)
     .eq('entry_date', today)
-    .single();
+    .maybeSingle();
 
-  if (error && error.code !== 'PGRST116') {
-    // PGRST116 = no rows returned, which is expected if no entry today
-    throw error;
-  }
+  if (error) throw error;
 
   return data;
 }
 
 export async function getEntryByDate(date: string): Promise<Entry | null> {
+  const userId = await getCurrentUserId();
+
   const { data, error } = await supabase
     .from('entries')
     .select('*')
+    .eq('user_id', userId)
     .eq('entry_date', date)
-    .single();
+    .maybeSingle();
 
-  if (error && error.code !== 'PGRST116') {
-    throw error;
-  }
+  if (error) throw error;
+
+  return data;
+}
+
+export async function getEntryById(id: string): Promise<Entry | null> {
+  const userId = await getCurrentUserId();
+
+  const { data, error } = await supabase
+    .from('entries')
+    .select('*')
+    .eq('id', id)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) throw error;
 
   return data;
 }
 
 export async function getEntriesByYear(year: number): Promise<Entry[]> {
+  const userId = await getCurrentUserId();
   const startDate = `${year}-01-01`;
   const endDate = `${year}-12-31`;
 
   const { data, error } = await supabase
     .from('entries')
     .select('*')
+    .eq('user_id', userId)
     .gte('entry_date', startDate)
     .lte('entry_date', endDate)
     .order('entry_date', { ascending: false });
@@ -49,12 +75,14 @@ export async function getEntriesByYear(year: number): Promise<Entry[]> {
 }
 
 export async function getEntriesByMonth(year: number, month: number): Promise<Entry[]> {
+  const userId = await getCurrentUserId();
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
   const endDate = format(new Date(year, month, 0), 'yyyy-MM-dd');
 
   const { data, error } = await supabase
     .from('entries')
     .select('*')
+    .eq('user_id', userId)
     .gte('entry_date', startDate)
     .lte('entry_date', endDate)
     .order('entry_date', { ascending: true });
@@ -64,9 +92,11 @@ export async function getEntriesByMonth(year: number, month: number): Promise<En
 }
 
 export async function createEntry(input: CreateEntryInput): Promise<Entry> {
+  const userId = await getCurrentUserId();
+
   const { data, error } = await supabase
     .from('entries')
-    .insert(input)
+    .insert({ ...input, user_id: userId })
     .select()
     .single();
 
@@ -75,10 +105,13 @@ export async function createEntry(input: CreateEntryInput): Promise<Entry> {
 }
 
 export async function updateEntry(id: string, input: UpdateEntryInput): Promise<Entry> {
+  const userId = await getCurrentUserId();
+
   const { data, error } = await supabase
     .from('entries')
     .update(input)
     .eq('id', id)
+    .eq('user_id', userId)
     .select()
     .single();
 
@@ -87,10 +120,12 @@ export async function updateEntry(id: string, input: UpdateEntryInput): Promise<
 }
 
 export async function upsertEntry(input: CreateEntryInput): Promise<Entry> {
+  const userId = await getCurrentUserId();
+
   // This handles the "one entry per day" constraint gracefully
   const { data, error } = await supabase
     .from('entries')
-    .upsert(input, {
+    .upsert({ ...input, user_id: userId }, {
       onConflict: 'user_id,entry_date',
     })
     .select()
@@ -101,10 +136,13 @@ export async function upsertEntry(input: CreateEntryInput): Promise<Entry> {
 }
 
 export async function deleteEntry(id: string): Promise<void> {
+  const userId = await getCurrentUserId();
+
   const { error } = await supabase
     .from('entries')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .eq('user_id', userId);
 
   if (error) throw error;
 }

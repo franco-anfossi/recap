@@ -5,6 +5,11 @@ import { format } from 'date-fns';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
+function mergeEntry(entries: Entry[], entry: Entry): Entry[] {
+  const nextEntries = entries.filter((existing) => existing.id !== entry.id);
+  return [entry, ...nextEntries].sort((a, b) => b.entry_date.localeCompare(a.entry_date));
+}
+
 interface EntriesState {
   entries: Entry[];
   todayEntry: Entry | null;
@@ -22,6 +27,7 @@ interface EntriesState {
 
   // API Actions
   fetchTodayEntry: () => Promise<Entry | null>;
+  fetchEntryById: (id: string) => Promise<Entry | null>;
   fetchEntriesByYear: (year: number) => Promise<void>;
   fetchEntriesByMonth: (year: number, month: number) => Promise<void>;
   createOrUpdateEntry: (input: CreateEntryInput) => Promise<Entry>;
@@ -56,6 +62,25 @@ export const useEntriesStore = create<EntriesState>()(
         try {
           const entry = await entriesApi.getTodayEntry();
           set({ todayEntry: entry, isLoading: false });
+          return entry;
+        } catch (error: any) {
+          set({ error: error.message, isLoading: false });
+          return null;
+        }
+      },
+
+      fetchEntryById: async (id) => {
+        set({ isLoading: true, error: null });
+        try {
+          const entry = await entriesApi.getEntryById(id);
+          const today = format(new Date(), 'yyyy-MM-dd');
+
+          set((state) => ({
+            entries: entry ? mergeEntry(state.entries, entry) : state.entries,
+            todayEntry: entry?.entry_date === today ? entry : state.todayEntry,
+            isLoading: false,
+          }));
+
           return entry;
         } catch (error: any) {
           set({ error: error.message, isLoading: false });
