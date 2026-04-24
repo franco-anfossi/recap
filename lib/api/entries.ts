@@ -1,6 +1,17 @@
 import { CreateEntryInput, Entry, UpdateEntryInput } from '@/types';
-import { format } from 'date-fns';
+import { format, isFuture, isValid, parseISO } from 'date-fns';
 import { supabase } from '../supabase';
+
+function assertSaveableEntryDate(entryDate: string): void {
+  const parsedDate = parseISO(entryDate);
+
+  if (!isValid(parsedDate)) {
+    throw new Error('Invalid entry date');
+  }
+  if (isFuture(parsedDate)) {
+    throw new Error('Cannot save future entries');
+  }
+}
 
 async function getCurrentUserId(): Promise<string> {
   const { data: { user }, error } = await supabase.auth.getUser();
@@ -92,6 +103,7 @@ export async function getEntriesByMonth(year: number, month: number): Promise<En
 }
 
 export async function createEntry(input: CreateEntryInput): Promise<Entry> {
+  assertSaveableEntryDate(input.entry_date);
   const userId = await getCurrentUserId();
 
   const { data, error } = await supabase
@@ -120,6 +132,7 @@ export async function updateEntry(id: string, input: UpdateEntryInput): Promise<
 }
 
 export async function upsertEntry(input: CreateEntryInput): Promise<Entry> {
+  assertSaveableEntryDate(input.entry_date);
   const userId = await getCurrentUserId();
 
   // This handles the "one entry per day" constraint gracefully
