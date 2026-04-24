@@ -5,6 +5,7 @@ import { borderRadius, colors, spacing, typography } from '@/constants/theme';
 import * as api from '@/lib/api/goals';
 import { useAuthStore, useEntriesStore, useGoalsStore } from '@/stores';
 import { Visibility } from '@/types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format, parseISO } from 'date-fns';
 import React, { useEffect, useState } from 'react';
 import {
@@ -23,8 +24,25 @@ interface EntryFormProps {
   onSuccess?: () => void;
 }
 
+interface EntryDraft {
+  mood: MoodLevel | null;
+  note: string;
+  visibility: Visibility;
+  selectedGoalIds: string[];
+  updatedAt: string;
+}
+
+function areGoalIdsEqual(left: string[], right: string[]) {
+  return left.length === right.length && left.every(id => right.includes(id));
+}
+
+function isVisibility(value: unknown): value is Visibility {
+  return value === 'private' || value === 'friends' || value === 'public';
+}
+
 export function EntryForm({ date, onSuccess }: EntryFormProps) {
   const entryDate = date || format(new Date(), 'yyyy-MM-dd');
+  const draftStorageKey = `entry-draft:${entryDate}`;
   const { todayEntry, createOrUpdateEntry, isLoading, fetchTodayEntry } = useEntriesStore();
   const { user } = useAuthStore();
   const { goals, fetchGoals } = useGoalsStore();
@@ -34,6 +52,8 @@ export function EntryForm({ date, onSuccess }: EntryFormProps) {
   const [visibility, setVisibility] = useState<Visibility>('private');
   const [selectedGoalIds, setSelectedGoalIds] = useState<string[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
+  const [isDraftLoaded, setIsDraftLoaded] = useState(false);
+  const [draftStatus, setDraftStatus] = useState<'idle' | 'saved' | 'restored'>('idle');
 
   // Track initial state to detect changes
   const [initialGoalIds, setInitialGoalIds] = useState<string[]>([]);
@@ -69,21 +89,113 @@ export function EntryForm({ date, onSuccess }: EntryFormProps) {
   }, [existingEntry]);
 
   useEffect(() => {
+    let isMounted = true;
+
+    setIsDraftLoaded(false);
+    setDraftStatus('idle');
+
+    AsyncStorage.getItem(draftStorageKey)
+      .then((rawDraft) => {
+        if (!isMounted || !rawDraft) return;
+
+        const draft = JSON.parse(rawDraft) as Partial<EntryDraft>;
+
+        if (typeof draft.mood === 'number') {
+          setSelectedMood(toMoodLevel(draft.mood));
+        }
+        if (typeof draft.note === 'string') {
+          setNote(draft.note);
+        }
+        if (isVisibility(draft.visibility)) {
+          setVisibility(draft.visibility);
+        }
+        if (Array.isArray(draft.selectedGoalIds)) {
+          setSelectedGoalIds(draft.selectedGoalIds.filter((id): id is string => typeof id === 'string'));
+        }
+
+        setDraftStatus('restored');
+      })
+      .catch((error) => {
+        console.error('Failed to restore entry draft', error);
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsDraftLoaded(true);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [draftStorageKey, existingEntry?.id]);
+
+  useEffect(() => {
     if (existingEntry) {
       const moodChanged = selectedMood !== existingEntry.mood;
       const noteChanged = note !== (existingEntry.note || '');
       const visibilityChanged = visibility !== (existingEntry.visibility || 'private');
 
       // Check if goals changed
-      const goalsChanged =
-        selectedGoalIds.length !== initialGoalIds.length ||
-        !selectedGoalIds.every(id => initialGoalIds.includes(id));
+      const goalsChanged = !areGoalIdsEqual(selectedGoalIds, initialGoalIds);
 
       setHasChanges(moodChanged || noteChanged || goalsChanged || visibilityChanged);
     } else {
       setHasChanges(selectedMood !== null);
     }
   }, [selectedMood, note, visibility, existingEntry, selectedGoalIds, initialGoalIds]);
+
+  useEffect(() => {
+    if (!isDraftLoaded) return;
+
+    const existingEntryChanged = existingEntry
+      ? selectedMood !== existingEntry.mood ||
+        note !== (existingEntry.note || '') ||
+        visibility !== (existingEntry.visibility || 'private') ||
+        !areGoalIdsEqual(selectedGoalIds, initialGoalIds)
+      : false;
+
+    const newEntryHasContent =
+      !existingEntry &&
+      (selectedMood !== null ||
+        note.trim().length > 0 ||
+        visibility !== 'private' ||
+        selectedGoalIds.length > 0);
+
+    if (!existingEntryChanged && !newEntryHasContent) {
+      AsyncStorage.removeItem(draftStorageKey).catch((error) => {
+        console.error('Failed to clear entry draft', error);
+      });
+      setDraftStatus('idle');
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      const draft: EntryDraft = {
+        mood: selectedMood,
+        note,
+        visibility,
+        selectedGoalIds,
+        updatedAt: new Date().toISOString(),
+      };
+
+      AsyncStorage.setItem(draftStorageKey, JSON.stringify(draft))
+        .then(() => setDraftStatus('saved'))
+        .catch((error) => {
+          console.error('Failed to save entry draft', error);
+        });
+    }, 350);
+
+    return () => clearTimeout(timeoutId);
+  }, [
+    draftStorageKey,
+    existingEntry,
+    initialGoalIds,
+    isDraftLoaded,
+    note,
+    selectedGoalIds,
+    selectedMood,
+    visibility,
+  ]);
 
   const toggleGoal = (goalId: string) => {
     setSelectedGoalIds(prev => {
@@ -130,6 +242,8 @@ export function EntryForm({ date, onSuccess }: EntryFormProps) {
         setInitialGoalIds(selectedGoalIds);
       }
 
+      await AsyncStorage.removeItem(draftStorageKey);
+      setDraftStatus('idle');
       onSuccess?.();
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to save entry');
@@ -229,6 +343,12 @@ export function EntryForm({ date, onSuccess }: EntryFormProps) {
           fullWidth
           size="lg"
         />
+
+        {draftStatus !== 'idle' && (
+          <Text style={styles.draftIndicator}>
+            {draftStatus === 'restored' ? 'Draft restored' : 'Draft saved locally'}
+          </Text>
+        )}
 
         {existingEntry && (
           <Text style={styles.savedIndicator}>
@@ -335,5 +455,11 @@ const styles = StyleSheet.create({
     color: colors.success,
     textAlign: 'center',
     marginTop: spacing.md,
+  },
+  draftIndicator: {
+    fontSize: typography.sizes.sm,
+    color: colors.text.muted,
+    textAlign: 'center',
+    marginTop: spacing.sm,
   },
 });
