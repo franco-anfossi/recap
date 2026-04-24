@@ -1,4 +1,4 @@
-import { MOODS, MoodLevel } from '@/constants/moods';
+import { MOODS, toMoodLevel } from '@/constants/moods';
 import { borderRadius, colors, spacing, typography } from '@/constants/theme';
 import { useEntriesStore } from '@/stores';
 import { Entry } from '@/types';
@@ -20,15 +20,23 @@ const DAY_SIZE = (SCREEN_WIDTH - CALENDAR_PADDING * 2) / 7;
 export default function CalendarScreen() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const { entries, fetchEntriesByMonth } = useEntriesStore();
+  const today = new Date();
+  const isViewingCurrentMonth =
+    currentMonth.getFullYear() === today.getFullYear() &&
+    currentMonth.getMonth() >= today.getMonth();
 
   useEffect(() => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth() + 1;
     fetchEntriesByMonth(year, month);
-  }, [currentMonth]);
+  }, [currentMonth, fetchEntriesByMonth]);
 
-  const goToPreviousMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
-  const goToNextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
+  const goToPreviousMonth = () => setCurrentMonth((month) => subMonths(month, 1));
+  const goToNextMonth = () => {
+    if (!isViewingCurrentMonth) {
+      setCurrentMonth((month) => addMonths(month, 1));
+    }
+  };
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -74,9 +82,21 @@ export default function CalendarScreen() {
           {format(currentMonth, 'MMMM yyyy')}
         </Text>
 
-        <TouchableOpacity onPress={goToNextMonth} style={styles.navButton}>
-          <Text style={styles.navText}>→</Text>
+        <TouchableOpacity
+          onPress={goToNextMonth}
+          style={[styles.navButton, isViewingCurrentMonth && styles.navButtonDisabled]}
+          disabled={isViewingCurrentMonth}
+        >
+          <Text style={[styles.navText, isViewingCurrentMonth && styles.navTextDisabled]}>→</Text>
         </TouchableOpacity>
+      </View>
+
+      <View style={styles.weekdays}>
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
+          <Text key={`${day}-${index}`} style={styles.weekday}>
+            {day}
+          </Text>
+        ))}
       </View>
 
       {/* Calendar Grid */}
@@ -91,7 +111,7 @@ export default function CalendarScreen() {
           const isFutureDay = isFuture(date);
           const isPastDay = isPast(date) && !isCurrentDay;
           const dayNumber = format(date, 'd');
-          const moodInfo = entry ? MOODS[entry.mood as MoodLevel] : null;
+          const moodInfo = entry ? MOODS[toMoodLevel(entry.mood)] : null;
 
           return (
             <TouchableOpacity
@@ -156,10 +176,28 @@ const styles = StyleSheet.create({
     color: colors.primary[500],
     fontWeight: typography.weights.bold,
   },
+  navButtonDisabled: {
+    opacity: 0.35,
+  },
+  navTextDisabled: {
+    color: colors.gray[400],
+  },
   monthTitle: {
     fontSize: typography.sizes.xl,
     fontWeight: typography.weights.bold,
     color: colors.text.primary,
+  },
+  weekdays: {
+    flexDirection: 'row',
+    paddingHorizontal: CALENDAR_PADDING,
+    marginBottom: spacing.xs,
+  },
+  weekday: {
+    width: DAY_SIZE,
+    textAlign: 'center',
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.bold,
+    color: colors.text.muted,
   },
   calendar: {
     flex: 1,

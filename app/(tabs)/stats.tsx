@@ -1,12 +1,10 @@
-import { getMoodColor, getMoodInfo } from '@/constants/moods';
+import { getMoodColor, getMoodInfo, toMoodLevel } from '@/constants/moods';
 import { borderRadius, colors, spacing, typography } from '@/constants/theme';
 import { useEntriesStore } from '@/stores';
 import { Entry } from '@/types';
 import { eachDayOfInterval, endOfMonth, endOfYear, format, getDay, isFuture, startOfMonth, startOfYear } from 'date-fns';
 import React, { useEffect, useState } from 'react';
-import { Dimensions, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-
-const { width } = Dimensions.get('window');
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 type ViewMode = 'year' | 'month-stripes';
 
@@ -14,15 +12,36 @@ export default function StatsScreen() {
   const { entries, fetchEntriesByYear } = useEntriesStore();
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [viewMode, setViewMode] = useState<ViewMode>('year');
+  const isViewingCurrentYear = currentYear >= new Date().getFullYear();
 
   useEffect(() => {
     fetchEntriesByYear(currentYear);
-  }, [currentYear]);
+  }, [currentYear, fetchEntriesByYear]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <Text style={styles.title}>Your Mood Patterns</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>Your Mood Patterns</Text>
+          <View style={styles.yearControls}>
+            <TouchableOpacity
+              style={styles.yearButton}
+              onPress={() => setCurrentYear((year) => year - 1)}
+            >
+              <Text style={styles.yearButtonText}>‹</Text>
+            </TouchableOpacity>
+            <Text style={styles.yearText}>{currentYear}</Text>
+            <TouchableOpacity
+              style={[styles.yearButton, isViewingCurrentYear && styles.yearButtonDisabled]}
+              onPress={() => setCurrentYear((year) => year + 1)}
+              disabled={isViewingCurrentYear}
+            >
+              <Text style={[styles.yearButtonText, isViewingCurrentYear && styles.yearButtonTextDisabled]}>
+                ›
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
         <View style={styles.toggles}>
           <TouchableOpacity
             style={[styles.toggle, viewMode === 'year' && styles.toggleActive]}
@@ -53,9 +72,6 @@ function MonthlyAverageChart({ entries }: { entries: Entry[] }) {
   const averages = React.useMemo(() => {
     const months = Array(12).fill(0).map(() => ({ sum: 0, count: 0 }));
     entries.forEach(e => {
-      const month = new Date(e.entry_date).getMonth(); // 0-11
-      // Handle timezone offset if necessary, but entry_date is YYYY-MM-DD
-      // Ideally parse with date-fns to be safe or split string
       const monthIndex = parseInt(e.entry_date.split('-')[1], 10) - 1;
       if (months[monthIndex]) {
         months[monthIndex].sum += e.mood;
@@ -74,7 +90,7 @@ function MonthlyAverageChart({ entries }: { entries: Entry[] }) {
       <View style={styles.chartContainer}>
         {averages.map((avg, index) => {
           const height = (avg / maxAverage) * 100;
-          const moodInfo = avg > 0 ? getMoodInfo(Math.round(avg) as any) : null;
+          const moodInfo = avg > 0 ? getMoodInfo(toMoodLevel(avg)) : null;
 
           return (
             <View key={index} style={styles.barColumn}>
@@ -128,7 +144,7 @@ function YearlyHeatmap({ entries, year }: { entries: Entry[], year: number }) {
               {week.map((date, dIndex) => {
                 if (!date) return <View key={dIndex} style={styles.heatmapCellEmpty} />;
                 const entry = getEntry(date);
-                const color = entry ? getMoodColor(entry.mood as any) : colors.gray[200];
+                const color = entry ? getMoodColor(toMoodLevel(entry.mood)) : colors.gray[200];
                 return (
                   <View
                     key={date.toISOString()}
@@ -164,7 +180,7 @@ function MonthlyStripes({ entries, year }: { entries: Entry[], year: number }) {
         {days.map((date, index) => {
           if (isFuture(date)) return null;
           const entry = getEntry(date);
-          const color = entry ? getMoodColor(entry.mood as any) : colors.gray[200];
+          const color = entry ? getMoodColor(toMoodLevel(entry.mood)) : colors.gray[200];
           return (
             <View
               key={date.toISOString()}
@@ -196,7 +212,7 @@ function MoodStats({ entries }: { entries: Entry[] }) {
         {[5, 4, 3, 2, 1].map((mood) => {
           const count = moodCounts[mood] || 0;
           const percentage = Math.round((count / total) * 100);
-          const info = getMoodInfo(mood as any);
+          const info = getMoodInfo(toMoodLevel(mood));
 
           return (
             <View key={mood} style={styles.statRow}>
@@ -224,11 +240,47 @@ const styles = StyleSheet.create({
   header: {
     marginBottom: spacing.xl,
   },
+  titleRow: {
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
   title: {
     fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.bold,
     color: colors.text.primary,
-    marginBottom: spacing.md,
+  },
+  yearControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: colors.gray[100],
+    borderRadius: borderRadius.md,
+    padding: 2,
+  },
+  yearButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: borderRadius.sm,
+  },
+  yearButtonDisabled: {
+    opacity: 0.35,
+  },
+  yearButtonText: {
+    fontSize: 22,
+    color: colors.primary[600],
+    fontWeight: typography.weights.bold,
+  },
+  yearButtonTextDisabled: {
+    color: colors.gray[400],
+  },
+  yearText: {
+    minWidth: 48,
+    textAlign: 'center',
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.bold,
+    color: colors.text.primary,
   },
   toggles: {
     flexDirection: 'row',

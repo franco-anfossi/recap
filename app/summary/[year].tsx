@@ -1,10 +1,10 @@
 import { Button, Card } from '@/components/ui';
-import { MOODS, MoodLevel } from '@/constants/moods';
+import { MOODS, toMoodLevel } from '@/constants/moods';
 import { colors, spacing, typography } from '@/constants/theme';
 import * as entriesApi from '@/lib/api/entries';
 import { useEntriesStore } from '@/stores';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -23,55 +23,70 @@ interface MonthlyStat {
 
 export default function YearlySummaryScreen() {
   const { year: yearParam } = useLocalSearchParams<{ year: string }>();
-  const year = parseInt(yearParam || new Date().getFullYear().toString());
+  const year = parseInt(yearParam || new Date().getFullYear().toString(), 10);
 
-  const { entries, fetchEntriesByYear, isLoading } = useEntriesStore();
+  const { fetchEntriesByYear, isLoading } = useEntriesStore();
   const [stats, setStats] = useState<{
     totalEntries: number;
     averageMood: number;
     moodDistribution: Record<number, number>;
     monthlyAverages: MonthlyStat[];
   } | null>(null);
-  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [yearlyInsight, setYearlyInsight] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  const loadStats = useCallback(async () => {
+    const data = await entriesApi.getEntryStats(year);
+    setStats(data);
+  }, [year]);
 
   useEffect(() => {
     fetchEntriesByYear(year);
     loadStats();
-  }, [year]);
+  }, [fetchEntriesByYear, loadStats, year]);
 
-  const loadStats = async () => {
-    const data = await entriesApi.getEntryStats(year);
-    setStats(data);
-  };
+  const generateYearlyInsight = async () => {
+    if (!stats) return;
 
-  const generateAISummary = async () => {
     setIsGenerating(true);
-    // Simulate AI summary generation
-    // In production, this would call a Supabase Edge Function
+
     setTimeout(() => {
-      const summary = `Your ${year} was a journey of emotional growth! 
+      const activeMonths = stats.monthlyAverages.filter((month) => month.count > 0);
+      const bestMonth = activeMonths.reduce<MonthlyStat | null>((best, month) => {
+        if (!best || month.average > best.average) return month;
+        return best;
+      }, null);
+      const busiestMonth = activeMonths.reduce<MonthlyStat | null>((busiest, month) => {
+        if (!busiest || month.count > busiest.count) return month;
+        return busiest;
+      }, null);
+      const mostCommonMood = Object.entries(stats.moodDistribution)
+        .sort(([, a], [, b]) => b - a)[0];
+      const mostCommonMoodLevel = toMoodLevel(Number(mostCommonMood?.[0] || 0));
+      const mostCommonMoodCount = mostCommonMood?.[1] || 0;
 
-📈 **Overall Trend**: Your mood averaged ${stats?.averageMood.toFixed(1)}/5, with ${stats?.totalEntries} journal entries throughout the year.
+      const summary = [
+        `Your average mood for ${year} was ${stats.averageMood.toFixed(1)}/5 across ${stats.totalEntries} entries.`,
+        bestMonth
+          ? `${monthNames[bestMonth.month - 1]} had your strongest average at ${bestMonth.average.toFixed(1)}/5.`
+          : null,
+        busiestMonth
+          ? `${monthNames[busiestMonth.month - 1]} was your most consistent month with ${busiestMonth.count} entries.`
+          : null,
+        mostCommonMoodCount > 0
+          ? `Your most frequent mood was ${MOODS[mostCommonMoodLevel].label.toLowerCase()} ${MOODS[mostCommonMoodLevel].emoji}, logged ${mostCommonMoodCount} times.`
+          : null,
+      ].filter(Boolean).join('\n\n');
 
-🌟 **Highlights**: You showed remarkable consistency in maintaining your journal practice. Your best months tended to cluster during the warmer seasons.
-
-💪 **Resilience**: Even during challenging periods, you demonstrated the ability to bounce back, with your mood typically recovering within a few days.
-
-🎯 **Growth Areas**: Consider focusing on maintaining your journaling habit during busy weeks. Your entries during consistent periods show more emotional balance.
-
-Keep journaling - self-reflection is the first step to emotional intelligence! 📓✨`;
-
-      setAiSummary(summary);
+      setYearlyInsight(summary);
       setIsGenerating(false);
-    }, 2000);
+    }, 400);
   };
 
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   const getMoodEmoji = (avg: number): string => {
-    const rounded = Math.round(avg) as MoodLevel;
-    return MOODS[rounded]?.emoji || '📊';
+    return avg > 0 ? MOODS[toMoodLevel(avg)].emoji : '📊';
   };
 
   return (
@@ -118,7 +133,7 @@ Keep journaling - self-reflection is the first step to emotional intelligence! �
                           styles.bar,
                           {
                             height: `${height}%`,
-                            backgroundColor: MOODS[Math.round(month.average) as MoodLevel]?.color || colors.gray[300],
+                            backgroundColor: month.average > 0 ? MOODS[toMoodLevel(month.average)].color : colors.gray[300],
                           },
                         ]}
                       />
@@ -135,7 +150,7 @@ Keep journaling - self-reflection is the first step to emotional intelligence! �
             <Card variant="outlined" padding="lg" style={styles.distributionCard}>
               <Text style={styles.sectionTitle}>Mood Distribution</Text>
               <View style={styles.distribution}>
-                {([1, 2, 3, 4, 5] as MoodLevel[]).map((level) => {
+                {([1, 2, 3, 4, 5] as const).map((level) => {
                   const count = stats.moodDistribution[level] || 0;
                   const percentage = stats.totalEntries > 0 ? Math.round((count / stats.totalEntries) * 100) : 0;
 
@@ -160,19 +175,19 @@ Keep journaling - self-reflection is the first step to emotional intelligence! �
               </View>
             </Card>
 
-            {/* AI Summary */}
-            <Card variant="elevated" padding="lg" style={styles.aiCard}>
-              <Text style={styles.sectionTitle}>✨ AI Summary</Text>
-              {aiSummary ? (
-                <Text style={styles.aiSummaryText}>{aiSummary}</Text>
+            {/* Yearly Insights */}
+            <Card variant="elevated" padding="lg" style={styles.insightCard}>
+              <Text style={styles.sectionTitle}>Yearly Insights</Text>
+              {yearlyInsight ? (
+                <Text style={styles.insightText}>{yearlyInsight}</Text>
               ) : (
-                <View style={styles.aiPrompt}>
-                  <Text style={styles.aiPromptText}>
-                    Get a personalized AI analysis of your emotional journey this year.
+                <View style={styles.insightPrompt}>
+                  <Text style={styles.insightPromptText}>
+                    Generate a grounded summary from your actual mood and journaling patterns.
                   </Text>
                   <Button
-                    title={isGenerating ? 'Generating...' : 'Generate Summary'}
-                    onPress={generateAISummary}
+                    title={isGenerating ? 'Generating...' : 'Generate Insights'}
+                    onPress={generateYearlyInsight}
                     loading={isGenerating}
                     disabled={isGenerating}
                   />
@@ -320,19 +335,19 @@ const styles = StyleSheet.create({
     width: 30,
     textAlign: 'right',
   },
-  aiCard: {
+  insightCard: {
     backgroundColor: colors.primary[50],
   },
-  aiPrompt: {
+  insightPrompt: {
     alignItems: 'center',
   },
-  aiPromptText: {
+  insightPromptText: {
     fontSize: typography.sizes.md,
     color: colors.text.secondary,
     textAlign: 'center',
     marginBottom: spacing.md,
   },
-  aiSummaryText: {
+  insightText: {
     fontSize: typography.sizes.md,
     color: colors.text.primary,
     lineHeight: 24,

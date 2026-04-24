@@ -37,7 +37,7 @@ const slides = [
     id: 4,
     emoji: '🎁',
     title: 'Your year, unwrapped',
-    description: 'At year\'s end, receive an AI-crafted summary of your journey.',
+    description: 'At year\'s end, see a grounded recap built from your actual patterns.',
   },
 ];
 
