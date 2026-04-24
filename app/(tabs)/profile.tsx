@@ -8,7 +8,7 @@ import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'rea
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuthStore();
-  const { entries } = useEntriesStore();
+  const { entries, fetchEntriesByYear } = useEntriesStore();
   const { goals, fetchGoals, createGoal, toggleCompletion, deleteGoal } = useGoalsStore();
   const { stats: socialStats, fetchStats: fetchSocialStats } = useSocialStore();
 
@@ -38,10 +38,12 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     if (user?.id) {
-      fetchGoals(new Date().getFullYear());
+      const currentYear = new Date().getFullYear();
+      fetchEntriesByYear(currentYear);
+      fetchGoals(currentYear);
       fetchSocialStats(user.id);
     }
-  }, [fetchGoals, fetchSocialStats, user?.id]);
+  }, [fetchEntriesByYear, fetchGoals, fetchSocialStats, user?.id]);
 
   const handleSignOut = async () => {
     try {
