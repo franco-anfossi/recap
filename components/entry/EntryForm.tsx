@@ -42,8 +42,9 @@ function isVisibility(value: unknown): value is Visibility {
 
 export function EntryForm({ date, onSuccess }: EntryFormProps) {
   const entryDate = date || format(new Date(), 'yyyy-MM-dd');
+  const entryYear = parseISO(entryDate).getFullYear();
   const draftStorageKey = `entry-draft:${entryDate}`;
-  const { todayEntry, createOrUpdateEntry, isLoading, fetchTodayEntry } = useEntriesStore();
+  const { todayEntry, createOrUpdateEntry, isLoading, fetchTodayEntry, getEntryByDate } = useEntriesStore();
   const { user } = useAuthStore();
   const { goals, fetchGoals } = useGoalsStore();
 
@@ -59,14 +60,14 @@ export function EntryForm({ date, onSuccess }: EntryFormProps) {
   const [initialGoalIds, setInitialGoalIds] = useState<string[]>([]);
 
   const isToday = entryDate === format(new Date(), 'yyyy-MM-dd');
-  const existingEntry = isToday ? todayEntry : null;
+  const existingEntry = isToday ? todayEntry : getEntryByDate(entryDate) || null;
 
   useEffect(() => {
     if (isToday) {
       fetchTodayEntry();
     }
-    fetchGoals(new Date().getFullYear());
-  }, [fetchGoals, fetchTodayEntry, isToday]);
+    fetchGoals(entryYear);
+  }, [entryYear, fetchGoals, fetchTodayEntry, isToday]);
 
   useEffect(() => {
     if (existingEntry) {

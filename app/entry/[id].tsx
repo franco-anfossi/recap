@@ -3,7 +3,7 @@ import { MOODS, toMoodLevel } from '@/constants/moods';
 import { borderRadius, colors, spacing, typography } from '@/constants/theme';
 import { useEntriesStore } from '@/stores';
 import { Entry } from '@/types';
-import { format, isToday, parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -76,6 +76,15 @@ export default function EntryDetailScreen() {
     );
   };
 
+  const handleEdit = () => {
+    if (!entry) return;
+
+    router.push({
+      pathname: '/entry/[id]',
+      params: { id: 'new', date: entry.entry_date },
+    });
+  };
+
   if (isFetchingEntry) {
     return (
       <SafeAreaView style={styles.container}>
@@ -101,19 +110,20 @@ export default function EntryDetailScreen() {
   const moodInfo = MOODS[toMoodLevel(entry.mood)];
   const formattedDate = format(parseISO(entry.entry_date), 'EEEE, MMMM d, yyyy');
 
-  const isEditable = isToday(parseISO(entry.entry_date));
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
-        {isEditable && (
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={handleEdit} style={styles.editButton}>
+            <Text style={styles.editText}>Edit</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
             <Text style={styles.deleteText}>Delete</Text>
           </TouchableOpacity>
-        )}
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -192,6 +202,19 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     padding: spacing.sm,
+  },
+  editButton: {
+    padding: spacing.sm,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  editText: {
+    fontSize: typography.sizes.md,
+    color: colors.primary[600],
+    fontWeight: typography.weights.medium,
   },
   deleteText: {
     fontSize: typography.sizes.md,

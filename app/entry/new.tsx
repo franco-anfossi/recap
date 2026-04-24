@@ -1,5 +1,6 @@
 import { EntryForm } from '@/components/entry';
 import { colors, spacing, typography } from '@/constants/theme';
+import { useEntriesStore } from '@/stores';
 import { format, isFuture, isValid, parseISO } from 'date-fns';
 import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
@@ -25,6 +26,9 @@ function getSafeEntryDate(date: string | undefined): string {
 export default function NewEntryScreen() {
   const { date } = useLocalSearchParams<{ date?: string }>();
   const entryDate = getSafeEntryDate(date);
+  const existingEntry = useEntriesStore((state) =>
+    state.entries.find((entry) => entry.entry_date === entryDate)
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -32,7 +36,7 @@ export default function NewEntryScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>New Entry</Text>
+        <Text style={styles.title}>{existingEntry ? 'Edit Entry' : 'New Entry'}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
