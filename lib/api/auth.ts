@@ -38,13 +38,27 @@ export async function getCurrentUser(): Promise<User | null> {
 
   if (!user) return null;
 
-  const { data: profile } = await supabase
+  const { data: profile, error } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', user.id)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (profile) return profile;
+
+  const { data: createdProfile, error: createError } = await supabase
+    .from('profiles')
+    .insert({
+      id: user.id,
+      email: user.email || '',
+      display_name: user.user_metadata?.display_name || null,
+    })
+    .select()
     .single();
 
-  return profile;
+  if (createError) throw createError;
+  return createdProfile;
 }
 
 export async function resetPassword(email: string) {

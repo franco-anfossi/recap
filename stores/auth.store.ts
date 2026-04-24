@@ -3,6 +3,9 @@ import { User } from '@/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { useEntriesStore } from './entries.store';
+import { useGoalsStore } from './goals.store';
+import { useSocialStore } from './social.store';
 
 interface AuthState {
   user: User | null;
@@ -14,8 +17,8 @@ interface AuthState {
   setUser: (user: User | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, displayName?: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<User | null>;
+  signUp: (email: string, password: string, displayName?: string) => Promise<User | null>;
   signOut: () => Promise<void>;
   checkAuth: () => Promise<void>;
   clearError: () => void;
@@ -23,7 +26,7 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       user: null,
       isLoading: true,
       isAuthenticated: false,
@@ -37,9 +40,10 @@ export const useAuthStore = create<AuthState>()(
       signIn: async (email, password) => {
         set({ isLoading: true, error: null });
         try {
-          await authApi.signIn({ email, password });
+          await authApi.signIn({ email: email.trim(), password });
           const user = await authApi.getCurrentUser();
-          set({ user, isAuthenticated: true, isLoading: false });
+          set({ user, isAuthenticated: !!user, isLoading: false });
+          return user;
         } catch (error: any) {
           set({ error: error.message, isLoading: false });
           throw error;
@@ -49,9 +53,14 @@ export const useAuthStore = create<AuthState>()(
       signUp: async (email, password, displayName) => {
         set({ isLoading: true, error: null });
         try {
-          await authApi.signUp({ email, password, display_name: displayName });
+          await authApi.signUp({
+            email: email.trim(),
+            password,
+            display_name: displayName?.trim() || undefined,
+          });
           const user = await authApi.getCurrentUser();
-          set({ user, isAuthenticated: true, isLoading: false });
+          set({ user, isAuthenticated: !!user, isLoading: false });
+          return user;
         } catch (error: any) {
           set({ error: error.message, isLoading: false });
           throw error;
@@ -62,6 +71,9 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true });
         try {
           await authApi.signOut();
+          useEntriesStore.getState().resetEntries();
+          useGoalsStore.getState().resetGoals();
+          useSocialStore.getState().resetSocial();
           set({ user: null, isAuthenticated: false, isLoading: false });
         } catch (error: any) {
           set({ error: error.message, isLoading: false });

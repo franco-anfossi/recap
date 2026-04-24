@@ -19,7 +19,7 @@ export interface CreateEntryInput {
   user_id: string;
   entry_date: string;
   mood: number;
-  note?: string;
+  note?: string | null;
   video_url?: string;
   video_thumbnail_url?: string;
   video_duration_seconds?: number;
@@ -28,7 +28,7 @@ export interface CreateEntryInput {
 
 export interface UpdateEntryInput {
   mood?: MoodLevel;
-  note?: string;
+  note?: string | null;
   video_url?: string;
   video_thumbnail_url?: string;
   video_duration_seconds?: number;

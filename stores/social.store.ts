@@ -1,9 +1,9 @@
 import * as api from '@/lib/api/social';
-import { Entry, Profile, SocialStats } from '@/types';
+import { Entry, Profile, Reaction, SocialStats } from '@/types';
 import { create } from 'zustand';
 
 interface SocialState {
-  feed: (Entry & { profiles: Profile })[];
+  feed: (Entry & { profiles: Profile; entry_reactions?: Reaction[] })[];
   followers: Profile[];
   following: Profile[];
   stats: SocialStats;
@@ -18,10 +18,12 @@ interface SocialState {
   fetchFollowing: (userId: string) => Promise<void>;
   fetchStats: (userId: string) => Promise<void>;
   searchUsers: (query: string) => Promise<void>;
+  clearSearchResults: () => void;
+  resetSocial: () => void;
 
   followUser: (userId: string) => Promise<void>;
   unfollowUser: (userId: string) => Promise<void>;
-  reactToEntry: (entryId: string, emoji: string) => Promise<void>;
+  reactToEntry: (entryId: string, emoji: string | null) => Promise<void>;
 }
 
 export const useSocialStore = create<SocialState>((set, get) => ({
@@ -75,6 +77,11 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   },
 
   searchUsers: async (query: string) => {
+    if (!query.trim()) {
+      set({ searchResults: [], isSearching: false });
+      return;
+    }
+
     set({ isSearching: true, error: null });
     try {
       const results = await api.searchUsers(query);
@@ -86,15 +93,25 @@ export const useSocialStore = create<SocialState>((set, get) => ({
     }
   },
 
+  clearSearchResults: () => set({ searchResults: [], isSearching: false }),
+  resetSocial: () => set({
+    feed: [],
+    followers: [],
+    following: [],
+    stats: { followersCount: 0, followingCount: 0, friendsCount: 0, isFollowing: false },
+    searchResults: [],
+    isLoading: false,
+    isSearching: false,
+    error: null,
+  }),
+
   followUser: async (userId: string) => {
     try {
       await api.followUser(userId);
-      // Update stats optimistically if viewing that user
       const currentStats = get().stats;
       set({
-        stats: { ...currentStats, isFollowing: true, followersCount: currentStats.followersCount + 1 }
+        stats: { ...currentStats, isFollowing: true, followingCount: currentStats.followingCount + 1 }
       });
-      // Optionally refresh lists
     } catch (error: any) {
       set({ error: error.message });
       throw error;
@@ -106,7 +123,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
       await api.unfollowUser(userId);
       const currentStats = get().stats;
       set({
-        stats: { ...currentStats, isFollowing: false, followersCount: Math.max(0, currentStats.followersCount - 1) }
+        stats: { ...currentStats, isFollowing: false, followingCount: Math.max(0, currentStats.followingCount - 1) }
       });
     } catch (error: any) {
       set({ error: error.message });
@@ -114,12 +131,10 @@ export const useSocialStore = create<SocialState>((set, get) => ({
     }
   },
 
-  reactToEntry: async (entryId: string, emoji: string) => {
+  reactToEntry: async (entryId: string, emoji: string | null) => {
     try {
       await api.reactToEntry(entryId, emoji);
-      // For MVP, we won't optimistically update reaction counts in the feed 
-      // as it requires more complex state structure (reactions map).
-      // We could re-fetch feed or just notify success.
+      await get().fetchFeed();
     } catch (error: any) {
       set({ error: error.message });
       throw error;

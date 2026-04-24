@@ -28,6 +28,11 @@ export default function ProfileScreen() {
         totalEntries: entries.length,
         averageMood: avgMood,
       });
+    } else {
+      setStats({
+        totalEntries: 0,
+        averageMood: 0,
+      });
     }
   }, [entries]);
 
@@ -36,7 +41,7 @@ export default function ProfileScreen() {
       fetchGoals(new Date().getFullYear());
       fetchSocialStats(user.id);
     }
-  }, [user]);
+  }, [fetchGoals, fetchSocialStats, user?.id]);
 
   const handleSignOut = async () => {
     try {
@@ -54,7 +59,7 @@ export default function ProfileScreen() {
         title,
         description,
       });
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to add goal');
     }
   };

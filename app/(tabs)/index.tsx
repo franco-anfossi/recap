@@ -1,20 +1,19 @@
 import { EntryForm } from '@/components/entry';
 import { StreakCard } from '@/components/streak';
 import { colors, spacing } from '@/constants/theme';
-import { useAuthStore, useEntriesStore } from '@/stores';
+import { useEntriesStore } from '@/stores';
 import { format, parseISO, subDays } from 'date-fns';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 export default function TodayScreen() {
   const { entries, fetchEntriesByYear } = useEntriesStore();
-  const { user } = useAuthStore();
   const [streak, setStreak] = useState(0);
 
   useEffect(() => {
     const currentYear = new Date().getFullYear();
     fetchEntriesByYear(currentYear);
-  }, []);
+  }, [fetchEntriesByYear]);
 
   useEffect(() => {
     // Calculate streak

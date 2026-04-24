@@ -32,8 +32,17 @@ export default function RegisterScreen() {
     }
 
     try {
-      await signUp(email, password, name || undefined);
-      router.replace('/(auth)/onboarding');
+      const user = await signUp(email, password, name || undefined);
+
+      if (user) {
+        router.replace('/(auth)/onboarding');
+      } else {
+        Alert.alert(
+          'Check your email',
+          'Confirm your account before signing in.'
+        );
+        router.replace('/(auth)/login');
+      }
     } catch (err: any) {
       Alert.alert('Registration Failed', err.message || 'Please try again');
     }

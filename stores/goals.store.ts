@@ -12,12 +12,15 @@ interface GoalsState {
   updateGoal: (id: string, input: UpdateGoalInput) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
   toggleCompletion: (id: string, isCompleted: boolean) => Promise<void>;
+  resetGoals: () => void;
 }
 
 export const useGoalsStore = create<GoalsState>((set, get) => ({
   goals: [],
   isLoading: false,
   error: null,
+
+  resetGoals: () => set({ goals: [], isLoading: false, error: null }),
 
   fetchGoals: async (year: number) => {
     set({ isLoading: true, error: null });

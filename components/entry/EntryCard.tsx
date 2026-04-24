@@ -1,9 +1,9 @@
 import { MoodIcon } from '@/components/mood';
 import { Card } from '@/components/ui';
-import { MoodLevel } from '@/constants/moods';
+import { toMoodLevel } from '@/constants/moods';
 import { borderRadius, colors, spacing, typography } from '@/constants/theme';
 import { Entry } from '@/types';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -14,12 +14,12 @@ interface EntryCardProps {
 }
 
 export function EntryCard({ entry, onPress, compact = false }: EntryCardProps) {
-  const formattedDate = format(new Date(entry.entry_date), compact ? 'MMM d' : 'EEEE, MMMM d');
+  const formattedDate = format(parseISO(entry.entry_date), compact ? 'MMM d' : 'EEEE, MMMM d');
 
   const Content = (
     <Card variant="elevated" padding={compact ? 'sm' : 'md'}>
       <View style={styles.row}>
-        <MoodIcon mood={entry.mood as MoodLevel} size={compact ? 'md' : 'lg'} />
+        <MoodIcon mood={toMoodLevel(entry.mood)} size={compact ? 'md' : 'lg'} />
         <View style={styles.content}>
           <Text style={[styles.date, compact && styles.dateCompact]}>
             {formattedDate}

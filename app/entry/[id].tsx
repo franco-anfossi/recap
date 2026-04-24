@@ -1,5 +1,5 @@
 import { Button, Card } from '@/components/ui';
-import { MoodLevel, MOODS } from '@/constants/moods';
+import { MOODS, toMoodLevel } from '@/constants/moods';
 import { borderRadius, colors, spacing, typography } from '@/constants/theme';
 import { useEntriesStore } from '@/stores';
 import { Entry } from '@/types';
@@ -18,7 +18,7 @@ import {
 
 export default function EntryDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { entries, deleteEntry, isLoading } = useEntriesStore();
+  const { entries, deleteEntry } = useEntriesStore();
   const [entry, setEntry] = useState<Entry | null>(null);
 
   useEffect(() => {
@@ -57,8 +57,8 @@ export default function EntryDetailScreen() {
     );
   }
 
-  const moodInfo = MOODS[entry.mood as MoodLevel];
-  const formattedDate = format(new Date(entry.entry_date), 'EEEE, MMMM d, yyyy');
+  const moodInfo = MOODS[toMoodLevel(entry.mood)];
+  const formattedDate = format(parseISO(entry.entry_date), 'EEEE, MMMM d, yyyy');
 
   const isEditable = isToday(parseISO(entry.entry_date));
 

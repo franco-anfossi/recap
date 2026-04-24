@@ -10,6 +10,16 @@ export const MOODS = {
 export type MoodLevel = keyof typeof MOODS;
 export type MoodInfo = (typeof MOODS)[MoodLevel];
 
+export const toMoodLevel = (level: number): MoodLevel => {
+  const roundedLevel = Math.round(level);
+
+  if (roundedLevel >= 1 && roundedLevel <= 5) {
+    return roundedLevel as MoodLevel;
+  }
+
+  return 3;
+};
+
 export const getMoodInfo = (level: MoodLevel): MoodInfo => MOODS[level];
 export const getMoodColor = (level: MoodLevel): string => MOODS[level].color;
 export const getMoodEmoji = (level: MoodLevel): string => MOODS[level].emoji;

@@ -6,6 +6,7 @@ import { supabase } from '../supabase';
 export async function followUser(userId: string): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
+  if (user.id === userId) throw new Error('You cannot follow yourself');
 
   const { error } = await supabase
     .from('follows')
@@ -26,6 +27,13 @@ export async function unfollowUser(userId: string): Promise<void> {
   if (error) throw error;
 }
 
+function normalizeJoinedProfile(profile: Profile | Profile[] | null): Profile | null {
+  if (Array.isArray(profile)) {
+    return profile[0] ?? null;
+  }
+  return profile;
+}
+
 export async function getFollowers(userId: string): Promise<Profile[]> {
   const { data, error } = await supabase
     .from('follows')
@@ -33,8 +41,9 @@ export async function getFollowers(userId: string): Promise<Profile[]> {
     .eq('following_id', userId);
 
   if (error) throw error;
-  // @ts-ignore: Supabase typing is tricky with joins
-  return data.map(d => d.profiles);
+  return (data || [])
+    .map((row) => normalizeJoinedProfile(row.profiles as Profile | Profile[] | null))
+    .filter((profile): profile is Profile => Boolean(profile));
 }
 
 export async function getFollowing(userId: string): Promise<Profile[]> {
@@ -44,8 +53,9 @@ export async function getFollowing(userId: string): Promise<Profile[]> {
     .eq('follower_id', userId);
 
   if (error) throw error;
-  // @ts-ignore
-  return data.map(d => d.profiles);
+  return (data || [])
+    .map((row) => normalizeJoinedProfile(row.profiles as Profile | Profile[] | null))
+    .filter((profile): profile is Profile => Boolean(profile));
 }
 
 export async function getSocialStats(userId: string): Promise<SocialStats> {
@@ -55,8 +65,14 @@ export async function getSocialStats(userId: string): Promise<SocialStats> {
   const [followersData, followingData, isFollowing] = await Promise.all([
     supabase.from('follows').select('follower_id').eq('following_id', userId),
     supabase.from('follows').select('following_id').eq('follower_id', userId),
-    currentUser ? supabase.from('follows').select('*').match({ follower_id: currentUser.id, following_id: userId }).single() : Promise.resolve({ data: null, error: null })
+    currentUser
+      ? supabase.from('follows').select('*').match({ follower_id: currentUser.id, following_id: userId }).maybeSingle()
+      : Promise.resolve({ data: null, error: null })
   ]);
+
+  if (followersData.error) throw followersData.error;
+  if (followingData.error) throw followingData.error;
+  if (isFollowing.error) throw isFollowing.error;
 
   const followerIds = new Set(followersData.data?.map(f => f.follower_id) || []);
   const followingIds = new Set(followingData.data?.map(f => f.following_id) || []);
@@ -78,64 +94,108 @@ export async function getSocialStats(userId: string): Promise<SocialStats> {
 }
 
 export async function searchUsers(query: string): Promise<Profile[]> {
-  if (!query.trim()) return [];
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) return [];
 
-  const { data, error } = await supabase
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const emailQuery = supabase
     .from('profiles')
     .select('*')
-    .ilike('email', `%${query}%`)
+    .ilike('email', `%${trimmedQuery}%`)
     .limit(10);
 
-  if (error) throw error;
-  return data;
+  const nameQuery = supabase
+    .from('profiles')
+    .select('*')
+    .ilike('display_name', `%${trimmedQuery}%`)
+    .limit(10);
+
+  if (user) {
+    emailQuery.neq('id', user.id);
+    nameQuery.neq('id', user.id);
+  }
+
+  const [byEmail, byName] = await Promise.all([emailQuery, nameQuery]);
+
+  if (byEmail.error) throw byEmail.error;
+  if (byName.error) throw byName.error;
+
+  const results = new Map<string, Profile>();
+  [...(byEmail.data || []), ...(byName.data || [])].forEach((profile) => {
+    results.set(profile.id, profile);
+  });
+
+  return Array.from(results.values()).slice(0, 10);
 }
 
 // --- Feed ---
 
-// Complex query for feed:
-// 1. Get people I follow
-// 2. Get their "friends" or "public" entries
-// For MVP, we'll fetch recently updated public/friends entries and filter in application or use a view if needed
-export async function getFeed(): Promise<(Entry & { profiles: Profile })[]> {
+export async function getFeed(): Promise<(Entry & { profiles: Profile; entry_reactions?: Reaction[] })[]> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
   // Get list of people I follow
-  const { data: following } = await supabase
+  const { data: following, error: followingError } = await supabase
     .from('follows')
     .select('following_id')
     .eq('follower_id', user.id);
 
+  if (followingError) throw followingError;
+
   // Also include myself
-  const userIds = [user.id, ...(following?.map(f => f.following_id) || [])];
+  const followingIds = new Set((following || []).map(f => f.following_id));
+  const userIds = [user.id, ...followingIds];
 
-  if (userIds.length === 0) return [];
+  const [networkEntries, publicEntries] = await Promise.all([
+    supabase
+      .from('entries')
+      .select('*, profiles(*), entry_reactions(*)')
+      .in('user_id', userIds)
+      .order('entry_date', { ascending: false })
+      .limit(20),
+    supabase
+      .from('entries')
+      .select('*, profiles(*), entry_reactions(*)')
+      .eq('visibility', 'public')
+      .order('entry_date', { ascending: false })
+      .limit(20),
+  ]);
 
-  const { data, error } = await supabase
-    .from('entries')
-    .select('*, profiles(*), entry_reactions(*)')
-    .in('user_id', userIds)
-    .order('entry_date', { ascending: false })
-    .limit(20);
+  if (networkEntries.error) throw networkEntries.error;
+  if (publicEntries.error) throw publicEntries.error;
 
-  if (error) throw error;
+  const entriesById = new Map<string, Entry & { profiles: Profile; entry_reactions?: Reaction[] }>();
 
-  // Filter visibility:
-  // - My entries: Always show
-  // - Others: Show if public OR (friends AND mutual follow)
-  // Since we query by 'following', we likely have access. But strictly 'friends' visibility 
-  // implies mutual follow. For MVP simplicity, we'll assume being followed allows seeing 'friends' 
-  // visible posts, or we just rely on client filtering.
-  // Ideally, RLS handles this securely.
+  [...(networkEntries.data || []), ...(publicEntries.data || [])].forEach((entry) => {
+    if (
+      entry.user_id === user.id ||
+      entry.visibility === 'public' ||
+      (entry.visibility === 'friends' && followingIds.has(entry.user_id))
+    ) {
+      entriesById.set(entry.id, entry as Entry & { profiles: Profile; entry_reactions?: Reaction[] });
+    }
+  });
 
-  return data as (Entry & { profiles: Profile })[];
+  return Array.from(entriesById.values())
+    .sort((a, b) => {
+      const dateComparison = b.entry_date.localeCompare(a.entry_date);
+      if (dateComparison !== 0) return dateComparison;
+      return b.created_at.localeCompare(a.created_at);
+    })
+    .slice(0, 30);
 }
 
 // --- Reactions ---
 
-export async function reactToEntry(entryId: string, emoji: string): Promise<void> {
+export async function reactToEntry(entryId: string, emoji: string | null): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
+
+  if (emoji === null) {
+    await removeReaction(entryId);
+    return;
+  }
 
   const { error } = await supabase
     .from('entry_reactions')

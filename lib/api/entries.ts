@@ -50,7 +50,7 @@ export async function getEntriesByYear(year: number): Promise<Entry[]> {
 
 export async function getEntriesByMonth(year: number, month: number): Promise<Entry[]> {
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-  const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+  const endDate = format(new Date(year, month, 0), 'yyyy-MM-dd');
 
   const { data, error } = await supabase
     .from('entries')
@@ -117,7 +117,11 @@ export async function getEntryStats(year: number) {
       totalEntries: 0,
       averageMood: 0,
       moodDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
-      monthlyAverages: [],
+      monthlyAverages: Array.from({ length: 12 }, (_, index) => ({
+        month: index + 1,
+        average: 0,
+        count: 0,
+      })),
     };
   }
 
@@ -132,7 +136,7 @@ export async function getEntryStats(year: number) {
   // Calculate monthly averages
   const monthlyData: Record<number, { sum: number; count: number }> = {};
   entries.forEach((e) => {
-    const month = new Date(e.entry_date).getMonth() + 1;
+    const month = Number(e.entry_date.split('-')[1]);
     if (!monthlyData[month]) {
       monthlyData[month] = { sum: 0, count: 0 };
     }
@@ -140,11 +144,16 @@ export async function getEntryStats(year: number) {
     monthlyData[month].count += 1;
   });
 
-  const monthlyAverages = Object.entries(monthlyData).map(([month, data]) => ({
-    month: parseInt(month),
-    average: data.sum / data.count,
-    count: data.count,
-  }));
+  const monthlyAverages = Array.from({ length: 12 }, (_, index) => {
+    const month = index + 1;
+    const data = monthlyData[month];
+
+    return {
+      month,
+      average: data ? data.sum / data.count : 0,
+      count: data?.count || 0,
+    };
+  });
 
   return {
     totalEntries: entries.length,

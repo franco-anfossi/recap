@@ -2,16 +2,19 @@ import { FeedEntry, UserCard } from '@/components/social';
 import { borderRadius, colors, spacing, typography } from '@/constants/theme';
 import { useAuthStore, useSocialStore } from '@/stores';
 import React, { useEffect, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export default function SocialScreen() {
   const {
     feed,
+    following,
     searchResults,
     isLoading,
     isSearching,
     fetchFeed,
+    fetchFollowing,
     searchUsers,
+    clearSearchResults,
     followUser,
     unfollowUser,
     reactToEntry
@@ -23,17 +26,27 @@ export default function SocialScreen() {
 
   useEffect(() => {
     fetchFeed();
-  }, []);
+  }, [fetchFeed]);
+
+  useEffect(() => {
+    if (currentUser?.id) {
+      fetchFollowing(currentUser.id);
+    }
+  }, [currentUser?.id, fetchFollowing]);
 
   // Debounce search
   useEffect(() => {
-    if (searchQuery.trim().length > 2) {
+    const query = searchQuery.trim();
+
+    if (query.length > 2) {
       const timer = setTimeout(() => {
-        searchUsers(searchQuery);
+        searchUsers(query);
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [searchQuery]);
+
+    clearSearchResults();
+  }, [clearSearchResults, searchQuery, searchUsers]);
 
   const handleSearchFocus = () => {
     setActiveTab('search');
@@ -42,6 +55,30 @@ export default function SocialScreen() {
   const handleCancelSearch = () => {
     setSearchQuery('');
     setActiveTab('feed');
+  };
+
+  const refreshFollowing = async () => {
+    if (currentUser?.id) {
+      await fetchFollowing(currentUser.id);
+    }
+  };
+
+  const handleFollow = async (userId: string) => {
+    try {
+      await followUser(userId);
+      await refreshFollowing();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to follow user');
+    }
+  };
+
+  const handleUnfollow = async (userId: string) => {
+    try {
+      await unfollowUser(userId);
+      await refreshFollowing();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to unfollow user');
+    }
   };
 
   return (
@@ -80,10 +117,9 @@ export default function SocialScreen() {
                 <UserCard
                   key={user.id}
                   user={user}
-                  isFollowing={false} // TODO: checking follow status requires lookup state
-                  onFollow={() => followUser(user.id)}
-                // Simplified for MVP - search result assumes not following or handles error
-                // Real implementation needs a map of followed IDs
+                  isFollowing={following.some((followedUser) => followedUser.id === user.id)}
+                  onFollow={() => handleFollow(user.id)}
+                  onUnfollow={() => handleUnfollow(user.id)}
                 />
               ))
             )}

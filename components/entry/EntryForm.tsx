@@ -1,6 +1,6 @@
 import { MoodPicker } from '@/components/mood';
 import { Button, Card, TextArea } from '@/components/ui';
-import { MoodLevel } from '@/constants/moods';
+import { MoodLevel, toMoodLevel } from '@/constants/moods';
 import { borderRadius, colors, spacing, typography } from '@/constants/theme';
 import * as api from '@/lib/api/goals';
 import { useAuthStore, useEntriesStore, useGoalsStore } from '@/stores';
@@ -46,11 +46,11 @@ export function EntryForm({ date, onSuccess }: EntryFormProps) {
       fetchTodayEntry();
     }
     fetchGoals(new Date().getFullYear());
-  }, [isToday]);
+  }, [fetchGoals, fetchTodayEntry, isToday]);
 
   useEffect(() => {
     if (existingEntry) {
-      setSelectedMood(existingEntry.mood as MoodLevel);
+      setSelectedMood(toMoodLevel(existingEntry.mood));
       setNote(existingEntry.note || '');
       setVisibility(existingEntry.visibility || 'private');
 
@@ -59,6 +59,12 @@ export function EntryForm({ date, onSuccess }: EntryFormProps) {
         setSelectedGoalIds(ids);
         setInitialGoalIds(ids);
       }).catch(err => console.error('Failed to fetch entry goals', err));
+    } else {
+      setSelectedMood(null);
+      setNote('');
+      setVisibility('private');
+      setSelectedGoalIds([]);
+      setInitialGoalIds([]);
     }
   }, [existingEntry]);
 
@@ -104,7 +110,8 @@ export function EntryForm({ date, onSuccess }: EntryFormProps) {
         user_id: user.id,
         entry_date: entryDate,
         mood: selectedMood,
-        note: note.trim() || undefined,
+        note: note.trim() || null,
+        visibility,
       });
 
       // Update linked goals
@@ -132,6 +139,11 @@ export function EntryForm({ date, onSuccess }: EntryFormProps) {
   const formattedDate = format(parseISO(entryDate), 'EEEE, MMMM d');
 
   const pendingGoals = goals.filter(g => !g.is_completed);
+  const visibilityOptions: { value: Visibility; label: string }[] = [
+    { value: 'private', label: 'Private' },
+    { value: 'friends', label: 'Friends' },
+    { value: 'public', label: 'Public' },
+  ];
 
   return (
     <KeyboardAvoidingView
@@ -188,20 +200,20 @@ export function EntryForm({ date, onSuccess }: EntryFormProps) {
           <View style={styles.visibilityContainer}>
             <Text style={styles.visibilityLabel}>Visibility:</Text>
             <View style={styles.visibilityOptions}>
-              {(['private', 'friends'] as Visibility[]).map((v) => (
+              {visibilityOptions.map(({ value, label }) => (
                 <TouchableOpacity
-                  key={v}
+                  key={value}
                   style={[
                     styles.visibilityOption,
-                    visibility === v && styles.visibilityOptionSelected
+                    visibility === value && styles.visibilityOptionSelected
                   ]}
-                  onPress={() => setVisibility(v)}
+                  onPress={() => setVisibility(value)}
                 >
                   <Text style={[
                     styles.visibilityText,
-                    visibility === v && styles.visibilityTextSelected
+                    visibility === value && styles.visibilityTextSelected
                   ]}>
-                    {v.charAt(0).toUpperCase() + v.slice(1)}
+                    {label}
                   </Text>
                 </TouchableOpacity>
               ))}

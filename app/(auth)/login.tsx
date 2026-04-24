@@ -25,7 +25,7 @@ export default function LoginScreen() {
     }
 
     try {
-      await signIn(email, password);
+      await signIn(email.trim(), password);
       router.replace('/(tabs)');
     } catch (err: any) {
       Alert.alert('Login Failed', err.message || 'Please check your credentials');
@@ -77,7 +77,7 @@ export default function LoginScreen() {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Don't have an account? </Text>
+          <Text style={styles.footerText}>{"Don't have an account? "}</Text>
           <Link href="/(auth)/register" asChild>
             <TouchableOpacity>
               <Text style={styles.link}>Sign up</Text>

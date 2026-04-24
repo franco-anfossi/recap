@@ -18,6 +18,7 @@ interface EntriesState {
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   setSelectedDate: (date: string) => void;
+  resetEntries: () => void;
 
   // API Actions
   fetchTodayEntry: () => Promise<Entry | null>;
@@ -42,6 +43,13 @@ export const useEntriesStore = create<EntriesState>()(
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
       setSelectedDate: (selectedDate) => set({ selectedDate }),
+      resetEntries: () => set({
+        entries: [],
+        todayEntry: null,
+        isLoading: false,
+        error: null,
+        selectedDate: format(new Date(), 'yyyy-MM-dd'),
+      }),
 
       fetchTodayEntry: async () => {
         set({ isLoading: true, error: null });
@@ -69,11 +77,18 @@ export const useEntriesStore = create<EntriesState>()(
         set({ isLoading: true, error: null });
         try {
           const entries = await entriesApi.getEntriesByMonth(year, month);
-          // Merge with existing entries, avoiding duplicates
-          const existingEntries = get().entries;
-          const existingDates = new Set(existingEntries.map((e) => e.entry_date));
-          const newEntries = entries.filter((e) => !existingDates.has(e.entry_date));
-          set({ entries: [...existingEntries, ...newEntries], isLoading: false });
+          const entriesByDate = new Map(get().entries.map((entry) => [entry.entry_date, entry]));
+
+          entries.forEach((entry) => {
+            entriesByDate.set(entry.entry_date, entry);
+          });
+
+          set({
+            entries: Array.from(entriesByDate.values()).sort((a, b) =>
+              b.entry_date.localeCompare(a.entry_date)
+            ),
+            isLoading: false,
+          });
         } catch (error: any) {
           set({ error: error.message, isLoading: false });
         }

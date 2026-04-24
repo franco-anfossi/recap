@@ -1,6 +1,7 @@
 import { Card } from '@/components/ui';
-import { getMoodInfo } from '@/constants/moods';
+import { getMoodInfo, toMoodLevel } from '@/constants/moods';
 import { colors, spacing, typography } from '@/constants/theme';
+import { useAuthStore } from '@/stores';
 import { Entry, Profile, Reaction } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
@@ -9,10 +10,8 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface FeedEntryProps {
   entry: Entry & { profiles: Profile; entry_reactions?: Reaction[] };
-  onReact?: (emoji: string) => void;
+  onReact?: (emoji: string | null) => void;
 }
-
-import { useAuthStore } from '@/stores';
 
 const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '🙌', '👏', '🔥', '🎉'];
 
@@ -40,7 +39,7 @@ export function FeedEntry({ entry, onReact }: FeedEntryProps) {
     reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
   });
 
-  const moodInfo = getMoodInfo(mood as any);
+  const moodInfo = getMoodInfo(toMoodLevel(mood));
   const formattedDate = format(parseISO(entry_date), 'MMM d');
 
   // Safety check if user profile is missing (e.g. RLS or join issue)
@@ -74,10 +73,7 @@ export function FeedEntry({ entry, onReact }: FeedEntryProps) {
       });
     }
 
-    // Call parent handler (null implies removal if we updated the interface)
-    // But currently onReact expects string. We should handle the API call here or assume parent handles toggle.
-    // The previous implementation assumed onReact just takes the emoji.
-    onReact?.(isRemoving ? 'REMOVE' : emoji);
+    onReact?.(isRemoving ? null : emoji);
   };
 
   return (
