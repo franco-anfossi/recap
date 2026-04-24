@@ -102,6 +102,21 @@ export async function getEntriesByMonth(year: number, month: number): Promise<En
   return data || [];
 }
 
+export async function getEntriesByDateRange(startDate: string, endDate: string): Promise<Entry[]> {
+  const userId = await getCurrentUserId();
+
+  const { data, error } = await supabase
+    .from('entries')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('entry_date', startDate)
+    .lte('entry_date', endDate)
+    .order('entry_date', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
 export async function createEntry(input: CreateEntryInput): Promise<Entry> {
   assertSaveableEntryDate(input.entry_date);
   const userId = await getCurrentUserId();

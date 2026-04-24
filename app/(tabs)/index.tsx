@@ -7,13 +7,16 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 export default function TodayScreen() {
-  const { entries, fetchEntriesByYear } = useEntriesStore();
+  const { entries, fetchEntriesByDateRange } = useEntriesStore();
   const [streak, setStreak] = useState(0);
 
   useEffect(() => {
-    const currentYear = new Date().getFullYear();
-    fetchEntriesByYear(currentYear);
-  }, [fetchEntriesByYear]);
+    const today = new Date();
+    fetchEntriesByDateRange(
+      format(subDays(today, 400), 'yyyy-MM-dd'),
+      format(today, 'yyyy-MM-dd')
+    );
+  }, [fetchEntriesByDateRange]);
 
   useEffect(() => {
     // Calculate streak

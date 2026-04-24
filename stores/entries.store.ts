@@ -10,6 +10,18 @@ function mergeEntry(entries: Entry[], entry: Entry): Entry[] {
   return [entry, ...nextEntries].sort((a, b) => b.entry_date.localeCompare(a.entry_date));
 }
 
+function mergeEntries(existingEntries: Entry[], incomingEntries: Entry[]): Entry[] {
+  const entriesByDate = new Map(existingEntries.map((entry) => [entry.entry_date, entry]));
+
+  incomingEntries.forEach((entry) => {
+    entriesByDate.set(entry.entry_date, entry);
+  });
+
+  return Array.from(entriesByDate.values()).sort((a, b) =>
+    b.entry_date.localeCompare(a.entry_date)
+  );
+}
+
 interface EntriesState {
   entries: Entry[];
   todayEntry: Entry | null;
@@ -30,6 +42,7 @@ interface EntriesState {
   fetchEntryById: (id: string) => Promise<Entry | null>;
   fetchEntriesByYear: (year: number) => Promise<void>;
   fetchEntriesByMonth: (year: number, month: number) => Promise<void>;
+  fetchEntriesByDateRange: (startDate: string, endDate: string) => Promise<void>;
   createOrUpdateEntry: (input: CreateEntryInput) => Promise<Entry>;
   deleteEntry: (id: string) => Promise<void>;
   getEntryByDate: (date: string) => Entry | undefined;
@@ -102,16 +115,22 @@ export const useEntriesStore = create<EntriesState>()(
         set({ isLoading: true, error: null });
         try {
           const entries = await entriesApi.getEntriesByMonth(year, month);
-          const entriesByDate = new Map(get().entries.map((entry) => [entry.entry_date, entry]));
-
-          entries.forEach((entry) => {
-            entriesByDate.set(entry.entry_date, entry);
-          });
 
           set({
-            entries: Array.from(entriesByDate.values()).sort((a, b) =>
-              b.entry_date.localeCompare(a.entry_date)
-            ),
+            entries: mergeEntries(get().entries, entries),
+            isLoading: false,
+          });
+        } catch (error: any) {
+          set({ error: error.message, isLoading: false });
+        }
+      },
+
+      fetchEntriesByDateRange: async (startDate, endDate) => {
+        set({ isLoading: true, error: null });
+        try {
+          const entries = await entriesApi.getEntriesByDateRange(startDate, endDate);
+          set({
+            entries: mergeEntries(get().entries, entries),
             isLoading: false,
           });
         } catch (error: any) {
