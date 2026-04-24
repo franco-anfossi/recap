@@ -61,8 +61,11 @@ export default function CalendarScreen() {
     const entry = getEntryForDate(date);
     if (entry) {
       router.push(`/entry/${entry.id}`);
-    } else if (isToday(date)) {
-      router.push('/(tabs)');
+    } else {
+      router.push({
+        pathname: '/entry/[id]',
+        params: { id: 'new', date: format(date, 'yyyy-MM-dd') },
+      });
     }
   };
 
