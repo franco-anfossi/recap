@@ -1,30 +1,53 @@
 import { Entry, Profile, Reaction, SocialStats } from '@/types';
 import { supabase } from '../supabase';
 
-// --- Follows ---
-
-export async function followUser(userId: string): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
-  if (user.id === userId) throw new Error('You cannot follow yourself');
-
-  const { error } = await supabase
-    .from('follows')
-    .insert({ follower_id: user.id, following_id: userId });
+async function getCurrentUserId(): Promise<string> {
+  const { data: { user }, error } = await supabase.auth.getUser();
 
   if (error) throw error;
+  if (!user) throw new Error('Not authenticated');
+
+  return user.id;
 }
 
-export async function unfollowUser(userId: string): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
+async function assertVisibleEntry(entryId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('entries')
+    .select('id')
+    .eq('id', entryId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error('Entry not found');
+}
+
+// --- Follows ---
+
+export async function followUser(userId: string): Promise<boolean> {
+  const currentUserId = await getCurrentUserId();
+  if (currentUserId === userId) throw new Error('You cannot follow yourself');
 
   const { error } = await supabase
     .from('follows')
+    .insert({ follower_id: currentUserId, following_id: userId });
+
+  if (error?.code === '23505') return false;
+  if (error) throw error;
+
+  return true;
+}
+
+export async function unfollowUser(userId: string): Promise<boolean> {
+  const currentUserId = await getCurrentUserId();
+
+  const { data, error } = await supabase
+    .from('follows')
     .delete()
-    .match({ follower_id: user.id, following_id: userId });
+    .match({ follower_id: currentUserId, following_id: userId })
+    .select('follower_id');
 
   if (error) throw error;
+  return (data || []).length > 0;
 }
 
 function normalizeJoinedProfile(profile: Profile | Profile[] | null): Profile | null {
@@ -132,20 +155,19 @@ export async function searchUsers(query: string): Promise<Profile[]> {
 // --- Feed ---
 
 export async function getFeed(): Promise<(Entry & { profiles: Profile; entry_reactions?: Reaction[] })[]> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
+  const currentUserId = await getCurrentUserId();
 
   // Get list of people I follow
   const { data: following, error: followingError } = await supabase
     .from('follows')
     .select('following_id')
-    .eq('follower_id', user.id);
+    .eq('follower_id', currentUserId);
 
   if (followingError) throw followingError;
 
   // Also include myself
   const followingIds = new Set((following || []).map(f => f.following_id));
-  const userIds = [user.id, ...followingIds];
+  const userIds = [currentUserId, ...followingIds];
 
   const [networkEntries, publicEntries] = await Promise.all([
     supabase
@@ -169,7 +191,7 @@ export async function getFeed(): Promise<(Entry & { profiles: Profile; entry_rea
 
   [...(networkEntries.data || []), ...(publicEntries.data || [])].forEach((entry) => {
     if (
-      entry.user_id === user.id ||
+      entry.user_id === currentUserId ||
       entry.visibility === 'public' ||
       (entry.visibility === 'friends' && followingIds.has(entry.user_id))
     ) {
@@ -189,18 +211,19 @@ export async function getFeed(): Promise<(Entry & { profiles: Profile; entry_rea
 // --- Reactions ---
 
 export async function reactToEntry(entryId: string, emoji: string | null): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
+  const currentUserId = await getCurrentUserId();
 
   if (emoji === null) {
     await removeReaction(entryId);
     return;
   }
 
+  await assertVisibleEntry(entryId);
+
   const { error } = await supabase
     .from('entry_reactions')
     .upsert(
-      { user_id: user.id, entry_id: entryId, emoji },
+      { user_id: currentUserId, entry_id: entryId, emoji },
       { onConflict: 'user_id,entry_id' }
     );
 
@@ -208,13 +231,12 @@ export async function reactToEntry(entryId: string, emoji: string | null): Promi
 }
 
 export async function removeReaction(entryId: string): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
+  const currentUserId = await getCurrentUserId();
 
   const { error } = await supabase
     .from('entry_reactions')
     .delete()
-    .match({ user_id: user.id, entry_id: entryId });
+    .match({ user_id: currentUserId, entry_id: entryId });
 
   if (error) throw error;
 }

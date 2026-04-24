@@ -107,10 +107,14 @@ export const useSocialStore = create<SocialState>((set, get) => ({
 
   followUser: async (userId: string) => {
     try {
-      await api.followUser(userId);
+      const didFollow = await api.followUser(userId);
       const currentStats = get().stats;
       set({
-        stats: { ...currentStats, isFollowing: true, followingCount: currentStats.followingCount + 1 }
+        stats: {
+          ...currentStats,
+          isFollowing: true,
+          followingCount: didFollow ? currentStats.followingCount + 1 : currentStats.followingCount,
+        }
       });
     } catch (error: any) {
       set({ error: error.message });
@@ -120,10 +124,16 @@ export const useSocialStore = create<SocialState>((set, get) => ({
 
   unfollowUser: async (userId: string) => {
     try {
-      await api.unfollowUser(userId);
+      const didUnfollow = await api.unfollowUser(userId);
       const currentStats = get().stats;
       set({
-        stats: { ...currentStats, isFollowing: false, followingCount: Math.max(0, currentStats.followingCount - 1) }
+        stats: {
+          ...currentStats,
+          isFollowing: false,
+          followingCount: didUnfollow
+            ? Math.max(0, currentStats.followingCount - 1)
+            : currentStats.followingCount,
+        }
       });
     } catch (error: any) {
       set({ error: error.message });
