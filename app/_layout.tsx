@@ -2,7 +2,7 @@ import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, router, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
@@ -46,6 +46,7 @@ export default function RootLayout() {
   const segments = useSegments();
   const { user, isAuthenticated, checkAuth } = useAuthStore();
   const [authChecked, setAuthChecked] = useState(false);
+  const splashHidden = useRef(false);
   const { hasHydrated, hasSeenWelcome, pendingSetupUserId, completedSetup } = useOnboardingStore();
 
   const [fontsLoaded] = useFonts({
@@ -84,7 +85,10 @@ export default function RootLayout() {
       router.replace('/(tabs)');
     }
 
-    SplashScreen.hideAsync();
+    if (!splashHidden.current) {
+      splashHidden.current = true;
+      SplashScreen.hideAsync().catch(() => {});
+    }
   }, [ready, isAuthenticated, user, pendingSetupUserId, completedSetup, hasSeenWelcome, segments]);
 
   if (!ready) return null;

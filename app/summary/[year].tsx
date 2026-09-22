@@ -79,7 +79,7 @@ export default function YearlySummaryScreen() {
       <ModalHeader />
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]} showsVerticalScrollIndicator={false}>
-        <Animated.View entering={FadeInDown.duration(400)}>
+        <Animated.View entering={FadeInDown.duration(400)} style={styles.heroCard}>
           <LinearGradient
             colors={['#FFB27C', '#F26A1B', '#8C340B']}
             start={{ x: 0, y: 0 }}
@@ -109,7 +109,7 @@ export default function YearlySummaryScreen() {
             <Animated.View entering={FadeInDown.delay(80).duration(400)} style={styles.tiles}>
               <BigStat value={String(stats.totalEntries)} label="check-ins" />
               <BigStat value={stats.averageMood.toFixed(1)} label="average mood" accent={MOODS[avgLevel].ink} />
-              <BigStat value={`${insights.longest}`} label="day best streak" />
+              <BigStat value={`${insights.longest}d`} label="best streak" />
             </Animated.View>
 
             <Animated.View entering={FadeInDown.delay(140).duration(400)} style={styles.card}>
@@ -237,13 +237,15 @@ const styles = StyleSheet.create({
   spinner: {
     marginTop: spacing.xxl,
   },
-  hero: {
+  heroCard: {
     borderRadius: radius.xl,
     borderCurve: 'continuous',
-    padding: spacing.s20,
-    minHeight: 220,
     overflow: 'hidden',
     ...shadows.brand,
+  },
+  hero: {
+    padding: spacing.s20,
+    minHeight: 220,
   },
   heroTop: {
     flexDirection: 'row',

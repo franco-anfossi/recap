@@ -26,6 +26,8 @@ interface EntryFormProps {
   onSuccess?: () => void;
   /** Rendered above the form inside the same scroll view (Today screen header). */
   header?: React.ReactNode;
+  /** Rendered below the form only while no mood is selected (fills the empty state). */
+  emptyFooter?: React.ReactNode;
 }
 
 interface EntryDraft {
@@ -50,7 +52,7 @@ const VISIBILITY_OPTIONS: { value: Visibility; label: string; icon: keyof typeof
   { value: 'public', label: 'Public', icon: 'globe-outline' },
 ];
 
-export function EntryForm({ date, onSuccess, header }: EntryFormProps) {
+export function EntryForm({ date, onSuccess, header, emptyFooter }: EntryFormProps) {
   const insets = useSafeAreaInsets();
   const entryDate = date || format(new Date(), 'yyyy-MM-dd');
   const parsedDate = parseISO(entryDate);
@@ -334,6 +336,12 @@ export function EntryForm({ date, onSuccess, header }: EntryFormProps) {
             </View>
           )}
         </Animated.View>
+
+        {!selectedMood && emptyFooter && (
+          <Animated.View entering={FadeIn.duration(250)} layout={LinearTransition.duration(250)}>
+            {emptyFooter}
+          </Animated.View>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );

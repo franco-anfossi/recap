@@ -1,6 +1,7 @@
-import { EntryForm } from '@/components/entry';
+import { EntryCard, EntryForm } from '@/components/entry';
 import { MoodFace } from '@/components/mood';
 import { StreakPill } from '@/components/streak';
+import { Ionicons } from '@expo/vector-icons';
 import { toMoodLevel } from '@/constants/moods';
 import { colors, fonts, radius, spacing, type } from '@/constants/theme';
 import { calculateCurrentStreak, greetingForHour } from '@/lib/streak';
@@ -80,9 +81,40 @@ export default function TodayScreen() {
     </View>
   );
 
+  const latest = week
+    .slice(0, -1)
+    .reverse()
+    .find((d) => d.entry)?.entry;
+  const missed = week.slice(0, -1).reverse().find((d) => !d.entry);
+
+  const emptyFooter = (
+    <View style={styles.footer}>
+      {latest && (
+        <View style={styles.footerBlock}>
+          <Text style={styles.footerLabel}>Last check-in</Text>
+          <EntryCard entry={latest} onPress={() => router.push(`/entry/${latest.id}`)} />
+        </View>
+      )}
+      {missed && (
+        <Pressable
+          onPress={() => router.push({ pathname: '/entry/new', params: { date: missed.key } })}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.missed, pressed && { opacity: 0.8 }]}
+        >
+          <View style={styles.missedIcon}>
+            <Ionicons name="calendar-outline" size={16} color={colors.brand} />
+          </View>
+          <Text style={styles.missedText}>
+            Missed {format(missed.date, 'EEEE')}? <Text style={styles.missedLink}>Add it now</Text>
+          </Text>
+        </Pressable>
+      )}
+    </View>
+  );
+
   return (
     <View style={styles.container}>
-      <EntryForm header={header} />
+      <EntryForm header={header} emptyFooter={emptyFooter} />
     </View>
   );
 }
@@ -155,5 +187,41 @@ const styles = StyleSheet.create({
   },
   dayEmptyToday: {
     backgroundColor: colors.brandSoft,
+  },
+  footer: {
+    gap: spacing.md,
+    marginTop: spacing.sm,
+  },
+  footerBlock: {
+    gap: spacing.sm,
+  },
+  footerLabel: {
+    ...type.label,
+  },
+  missed: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s12,
+    backgroundColor: colors.brandTint,
+    borderRadius: radius.md,
+    borderCurve: 'continuous',
+    padding: spacing.s12,
+  },
+  missedIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  missedText: {
+    ...type.subhead,
+    color: colors.ink,
+    flex: 1,
+  },
+  missedLink: {
+    fontFamily: fonts.sansSemibold,
+    color: colors.brandStrong,
   },
 });

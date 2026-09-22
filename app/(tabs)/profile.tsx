@@ -105,12 +105,12 @@ export default function ProfileScreen() {
       <View style={styles.tiles}>
         <StatTile label="Check-ins" value={String(stats.total)} hint={`in ${year}`} />
         <StatTile
-          label="Average mood"
+          label="Avg mood"
           value={stats.avg > 0 ? stats.avg.toFixed(1) : '–'}
           hint={stats.avg > 0 ? MOODS[toMoodLevel(stats.avg)].label : 'No entries yet'}
           accent={stats.avg > 0 ? MOODS[toMoodLevel(stats.avg)].ink : undefined}
         />
-        <StatTile label="Streak" value={`${stats.streak}d`} accent={stats.streak > 0 ? colors.brandStrong : undefined} />
+        <StatTile label="Streak" value={`${stats.streak}d`} hint="in a row" accent={stats.streak > 0 ? colors.brandStrong : undefined} />
       </View>
 
       <Pressable

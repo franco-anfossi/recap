@@ -221,10 +221,10 @@ const styles = StyleSheet.create({
   },
   noteQuote: {
     fontFamily: fonts.displayBold,
-    fontSize: 40,
-    lineHeight: 36,
+    fontSize: 64,
+    lineHeight: 48,
     color: colors.brandSoft,
-    marginBottom: -spacing.sm,
+    marginBottom: -spacing.md,
   },
   note: {
     fontFamily: fonts.displayItalic,
