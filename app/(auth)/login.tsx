@@ -2,6 +2,7 @@ import { Button, Input, Wordmark } from '@/components/ui';
 import { colors, fonts, spacing, type } from '@/constants/theme';
 import * as authApi from '@/lib/api/auth';
 import { friendlyAuthError } from '@/lib/auth-errors';
+import { t } from '@/lib/i18n';
 import { useAuthStore } from '@/stores';
 import { Link } from 'expo-router';
 import React, { useState } from 'react';
@@ -28,7 +29,7 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     setError(null);
     if (!email.trim() || !password) {
-      setError('Enter your email and password to continue.');
+      setError(t('auth.login.errors.missingFields'));
       return;
     }
 
@@ -42,14 +43,14 @@ export default function LoginScreen() {
 
   const handleForgot = async () => {
     if (!email.trim()) {
-      Alert.alert('Reset password', 'Type your email above first, then tap “Forgot password?” again.');
+      Alert.alert(t('auth.login.reset.needEmailTitle'), t('auth.login.reset.needEmailBody'));
       return;
     }
     try {
       await authApi.resetPassword(email.trim());
-      Alert.alert('Check your inbox', `We sent a reset link to ${email.trim()}.`);
+      Alert.alert(t('auth.login.reset.sentTitle'), t('auth.login.reset.sentBody', { email: email.trim() }));
     } catch (err: any) {
-      Alert.alert('Could not send reset link', err?.message || 'Try again in a moment.');
+      Alert.alert(t('auth.login.reset.failedTitle'), err?.message || t('auth.login.reset.failedBody'));
     }
   };
 
@@ -69,15 +70,15 @@ export default function LoginScreen() {
         <Wordmark size={28} />
 
         <Animated.View entering={FadeInDown.duration(400)} style={styles.header}>
-          <Text style={styles.title}>Welcome back.</Text>
-          <Text style={styles.subtitle}>Pick up where you left off.</Text>
+          <Text style={styles.title}>{t('auth.login.title')}</Text>
+          <Text style={styles.subtitle}>{t('auth.login.subtitle')}</Text>
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(80).duration(400)} style={styles.form}>
           <Input
-            label="Email"
+            label={t('auth.login.emailLabel')}
             icon="mail-outline"
-            placeholder="you@example.com"
+            placeholder={t('auth.login.emailPlaceholder')}
             value={email}
             onChangeText={(v) => {
               setEmail(v);
@@ -91,9 +92,9 @@ export default function LoginScreen() {
           />
 
           <Input
-            label="Password"
+            label={t('auth.login.passwordLabel')}
             icon="lock-closed-outline"
-            placeholder="Your password"
+            placeholder={t('auth.login.passwordPlaceholder')}
             value={password}
             onChangeText={(v) => {
               setPassword(v);
@@ -113,11 +114,11 @@ export default function LoginScreen() {
           )}
 
           <Pressable onPress={handleForgot} hitSlop={8} style={styles.forgot} accessibilityRole="button">
-            <Text style={styles.forgotText}>Forgot password?</Text>
+            <Text style={styles.forgotText}>{t('auth.login.forgot')}</Text>
           </Pressable>
 
           <Button
-            title="Sign in"
+            title={t('auth.login.submit')}
             onPress={handleLogin}
             loading={isLoading}
             size="lg"
@@ -126,10 +127,10 @@ export default function LoginScreen() {
         </Animated.View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>New to recap? </Text>
+          <Text style={styles.footerText}>{t('auth.login.newHere')}</Text>
           <Link href="/(auth)/register" replace asChild>
             <Pressable hitSlop={8} accessibilityRole="link">
-              <Text style={styles.link}>Create an account</Text>
+              <Text style={styles.link}>{t('auth.login.createAccount')}</Text>
             </Pressable>
           </Link>
         </View>

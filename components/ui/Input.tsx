@@ -1,4 +1,5 @@
 import { colors, fonts, radius, spacing, type } from '@/constants/theme';
+import { t } from '@/lib/i18n';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
@@ -66,7 +67,7 @@ export function Input({
             onPress={() => setIsSecure((s) => !s)}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel={isSecure ? 'Show password' : 'Hide password'}
+            accessibilityLabel={isSecure ? t('profile.input.showPassword') : t('profile.input.hidePassword')}
           >
             <Ionicons
               name={isSecure ? 'eye-outline' : 'eye-off-outline'}

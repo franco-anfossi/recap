@@ -1,7 +1,11 @@
+import { BurnerPicker, BurnerTag } from '@/components/burners';
 import { Button, Input, TextArea } from '@/components/ui';
+import { Burner } from '@/constants/burners';
 import { colors, radius, spacing, type } from '@/constants/theme';
-import { YearlyGoal } from '@/types';
+import { t } from '@/lib/i18n';
+import { GoalProgress, YearlyGoal } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
+import { differenceInCalendarDays, parseISO } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import React, { useState } from 'react';
 import {
@@ -9,6 +13,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -17,11 +22,32 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface GoalItemProps {
   goal: YearlyGoal;
+  progress?: GoalProgress;
   onToggle: (id: string, isCompleted: boolean) => void;
   onDelete: (id: string) => void;
+  onPress?: () => void;
+  /** Hide the burner tag (e.g. when the item is already listed under its burner). */
+  showBurner?: boolean;
 }
 
-export function GoalItem({ goal, onToggle, onDelete }: GoalItemProps) {
+export function describeProgress(progress?: GoalProgress): string {
+  if (!progress || progress.days === 0) return t('profile.goal.notMoved');
+  const parts = [t('profile.goal.daysMoved', { count: progress.days })];
+  if (progress.thisWeek > 0) parts.push(t('profile.goal.thisWeek', { count: progress.thisWeek }));
+  else if (progress.lastDate) {
+    const ago = differenceInCalendarDays(new Date(), parseISO(progress.lastDate));
+    parts.push(
+      ago === 0
+        ? t('profile.goal.lastToday')
+        : ago === 1
+          ? t('profile.goal.lastYesterday')
+          : t('profile.goal.lastDaysAgo', { count: ago })
+    );
+  }
+  return parts.join(' · ');
+}
+
+export function GoalItem({ goal, progress, onToggle, onDelete, onPress, showBurner = true }: GoalItemProps) {
   const toggle = () => {
     if (process.env.EXPO_OS === 'ios') {
       Haptics.notificationAsync(
@@ -32,7 +58,11 @@ export function GoalItem({ goal, onToggle, onDelete }: GoalItemProps) {
   };
 
   return (
-    <View style={[styles.goal, goal.is_completed && styles.goalDone]}>
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      style={({ pressed }) => [styles.goal, goal.is_completed && styles.goalDone, pressed && onPress && styles.pressed]}
+    >
       <Pressable
         onPress={toggle}
         hitSlop={8}
@@ -46,6 +76,12 @@ export function GoalItem({ goal, onToggle, onDelete }: GoalItemProps) {
 
       <View style={styles.goalText}>
         <Text style={[styles.goalTitle, goal.is_completed && styles.goalTitleDone]}>{goal.title}</Text>
+        <View style={styles.goalMeta}>
+          {showBurner && goal.burner && <BurnerTag burner={goal.burner} />}
+          <Text style={styles.goalProgress} numberOfLines={1}>
+            {goal.is_completed ? t('profile.goal.done') : describeProgress(progress)}
+          </Text>
+        </View>
         {goal.description ? <Text style={styles.goalDescription}>{goal.description}</Text> : null}
       </View>
 
@@ -53,34 +89,38 @@ export function GoalItem({ goal, onToggle, onDelete }: GoalItemProps) {
         onPress={() => onDelete(goal.id)}
         hitSlop={8}
         accessibilityRole="button"
-        accessibilityLabel={`Delete ${goal.title}`}
+        accessibilityLabel={t('profile.goal.deleteLabel', { title: goal.title })}
         style={({ pressed }) => [styles.delete, pressed && { opacity: 0.6 }]}
       >
         <Ionicons name="close" size={18} color={colors.inkMuted} />
       </Pressable>
-    </View>
+    </Pressable>
   );
 }
 
 interface AddGoalModalProps {
   visible: boolean;
   onClose: () => void;
-  onAdd: (title: string, description?: string) => void;
+  onAdd: (input: { title: string; description?: string; burner: Burner }) => void;
+  /** Preselect a burner (e.g. when adding from a burner section). */
+  initialBurner?: Burner | null;
 }
 
-export function AddGoalModal({ visible, onClose, onAdd }: AddGoalModalProps) {
+export function AddGoalModal({ visible, onClose, onAdd, initialBurner = null }: AddGoalModalProps) {
   const insets = useSafeAreaInsets();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [burner, setBurner] = useState<Burner | null>(initialBurner);
 
   const reset = () => {
     setTitle('');
     setDescription('');
+    setBurner(initialBurner);
   };
 
   const handleAdd = () => {
-    if (!title.trim()) return;
-    onAdd(title.trim(), description.trim() || undefined);
+    if (!title.trim() || !burner) return;
+    onAdd({ title: title.trim(), description: description.trim() || undefined, burner });
     reset();
     onClose();
   };
@@ -93,32 +133,40 @@ export function AddGoalModal({ visible, onClose, onAdd }: AddGoalModalProps) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={handleClose} accessibilityLabel="Close" />
+        <Pressable style={styles.backdrop} onPress={handleClose} accessibilityLabel={t('common.actions.close')} />
         <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md }]}>
           <View style={styles.grabber} />
-          <Text style={styles.sheetTitle}>New intention</Text>
-          <Text style={styles.sheetSub}>Something for this year. Keep it small enough to actually do.</Text>
+          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetContent}>
+            <Text style={styles.sheetTitle}>{t('profile.goal.sheet.title')}</Text>
+            <Text style={styles.sheetSub}>{t('profile.goal.sheet.subtitle')}</Text>
 
-          <Input
-            placeholder="e.g. Run twice a week"
-            value={title}
-            onChangeText={setTitle}
-            autoFocus
-            autoCapitalize="sentences"
-            returnKeyType="next"
-          />
-          <TextArea
-            placeholder="Why it matters (optional)"
-            value={description}
-            onChangeText={setDescription}
-            maxLength={200}
-            style={{ minHeight: 72 }}
-          />
+            <Input
+              placeholder={t('profile.goal.sheet.titlePlaceholder')}
+              value={title}
+              onChangeText={setTitle}
+              autoFocus
+              autoCapitalize="sentences"
+              returnKeyType="next"
+            />
 
-          <View style={styles.actions}>
-            <Button title="Cancel" variant="secondary" onPress={handleClose} style={styles.action} />
-            <Button title="Add" onPress={handleAdd} disabled={!title.trim()} style={styles.action} />
-          </View>
+            <View style={styles.block}>
+              <Text style={styles.blockLabel}>{t('profile.goal.sheet.burnerQuestion')}</Text>
+              <BurnerPicker value={burner} onChange={setBurner} />
+            </View>
+
+            <TextArea
+              placeholder={t('profile.goal.sheet.descriptionPlaceholder')}
+              value={description}
+              onChangeText={setDescription}
+              maxLength={200}
+              style={{ minHeight: 64 }}
+            />
+
+            <View style={styles.actions}>
+              <Button title={t('common.actions.cancel')} variant="secondary" onPress={handleClose} style={styles.action} />
+              <Button title={t('common.actions.add')} onPress={handleAdd} disabled={!title.trim() || !burner} style={styles.action} />
+            </View>
+          </ScrollView>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -140,6 +188,9 @@ const styles = StyleSheet.create({
   goalDone: {
     backgroundColor: colors.surfaceMuted,
   },
+  pressed: {
+    opacity: 0.85,
+  },
   checkbox: {
     width: 26,
     height: 26,
@@ -155,7 +206,7 @@ const styles = StyleSheet.create({
   },
   goalText: {
     flex: 1,
-    gap: 2,
+    gap: spacing.xs,
   },
   goalTitle: {
     ...type.bodyMedium,
@@ -163,6 +214,15 @@ const styles = StyleSheet.create({
   goalTitleDone: {
     textDecorationLine: 'line-through',
     color: colors.inkMuted,
+  },
+  goalMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  goalProgress: {
+    ...type.caption,
+    flex: 1,
   },
   goalDescription: {
     ...type.footnote,
@@ -186,8 +246,13 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     borderCurve: 'continuous',
-    padding: spacing.screen,
+    paddingTop: spacing.s12,
+    paddingHorizontal: spacing.screen,
+    maxHeight: '88%',
+  },
+  sheetContent: {
     gap: spacing.md,
+    paddingBottom: spacing.sm,
   },
   grabber: {
     alignSelf: 'center',
@@ -195,7 +260,7 @@ const styles = StyleSheet.create({
     height: 5,
     borderRadius: radius.full,
     backgroundColor: colors.borderStrong,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.s12,
   },
   sheetTitle: {
     ...type.title1,
@@ -203,6 +268,12 @@ const styles = StyleSheet.create({
   sheetSub: {
     ...type.subhead,
     marginTop: -spacing.sm,
+  },
+  block: {
+    gap: spacing.sm,
+  },
+  blockLabel: {
+    ...type.label,
   },
   actions: {
     flexDirection: 'row',

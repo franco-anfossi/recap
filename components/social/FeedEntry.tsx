@@ -1,11 +1,15 @@
+import { BurnerTag } from '@/components/burners';
 import { MoodFace } from '@/components/mood';
 import { Avatar } from '@/components/ui';
+import { isBurner } from '@/constants/burners';
 import { getMoodInfo, toMoodLevel } from '@/constants/moods';
 import { colors, fonts, radius, shadows, spacing, type } from '@/constants/theme';
+import { fmt } from '@/lib/dates';
+import { t } from '@/lib/i18n';
 import { useAuthStore } from '@/stores';
 import { Entry, Profile, Reaction } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
-import { format, isToday, isYesterday, parseISO } from 'date-fns';
+import { isToday, isYesterday, parseISO } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -19,14 +23,15 @@ interface FeedEntryProps {
 const REACTION_EMOJIS = ['❤️', '🙌', '🔥', '😂', '😮', '😢'];
 
 function relativeDay(date: Date) {
-  if (isToday(date)) return 'Today';
-  if (isYesterday(date)) return 'Yesterday';
-  return format(date, 'MMM d');
+  if (isToday(date)) return t('common.time.today');
+  if (isYesterday(date)) return t('common.time.yesterday');
+  return fmt(date, 'MMM d');
 }
 
 export function FeedEntry({ entry, onReact }: FeedEntryProps) {
   const { user: currentUser } = useAuthStore();
   const { mood, note, profiles: user, entry_date, user_id, entry_reactions = [] } = entry;
+  const burners = (entry.burners || []).filter(isBurner);
 
   const [localReactions, setLocalReactions] = React.useState<Reaction[]>(entry_reactions);
   const [showPicker, setShowPicker] = React.useState(false);
@@ -46,7 +51,7 @@ export function FeedEntry({ entry, onReact }: FeedEntryProps) {
 
   const level = toMoodLevel(mood);
   const moodInfo = getMoodInfo(level);
-  const displayName = isSelf ? 'You' : user?.display_name || 'Anonymous';
+  const displayName = isSelf ? t('social.user.you') : user?.display_name || t('social.user.anonymous');
 
   const handleReact = (emoji: string) => {
     setShowPicker(false);
@@ -92,6 +97,14 @@ export function FeedEntry({ entry, onReact }: FeedEntryProps) {
 
       {note ? <Text style={styles.note}>{note}</Text> : null}
 
+      {burners.length > 0 && (
+        <View style={styles.burners}>
+          {burners.map((b) => (
+            <BurnerTag key={b} burner={b} />
+          ))}
+        </View>
+      )}
+
       {(!isSelf || reactionEntries.length > 0) && (
         <View style={styles.footer}>
           <View style={styles.reactions}>
@@ -124,7 +137,7 @@ export function FeedEntry({ entry, onReact }: FeedEntryProps) {
                         <Pressable
                           onPress={() => handleReact(emoji)}
                           accessibilityRole="button"
-                          accessibilityLabel={`React ${emoji}`}
+                          accessibilityLabel={t('social.reactions.reactWith', { emoji })}
                           style={({ pressed }) => [
                             styles.pickerItem,
                             myReaction === emoji && styles.pickerItemActive,
@@ -141,11 +154,11 @@ export function FeedEntry({ entry, onReact }: FeedEntryProps) {
               <Pressable
                 onPress={() => setShowPicker((s) => !s)}
                 accessibilityRole="button"
-                accessibilityLabel="Add reaction"
+                accessibilityLabel={t('social.reactions.add')}
                 style={({ pressed }) => [styles.addReaction, pressed && { opacity: 0.7 }]}
               >
                 <Ionicons name={myReaction ? 'happy' : 'happy-outline'} size={18} color={myReaction ? colors.brand : colors.inkSecondary} />
-                <Text style={[styles.addReactionText, myReaction && { color: colors.brand }]}>{myReaction ? 'Reacted' : 'React'}</Text>
+                <Text style={[styles.addReactionText, myReaction && { color: colors.brand }]}>{myReaction ? t('social.reactions.reacted') : t('social.reactions.react')}</Text>
               </Pressable>
             </View>
           )}
@@ -198,6 +211,11 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 26,
     color: colors.ink,
+  },
+  burners: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs + 2,
   },
   footer: {
     flexDirection: 'row',

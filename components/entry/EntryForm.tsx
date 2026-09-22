@@ -1,8 +1,12 @@
+import { BurnerToggles } from '@/components/burners';
 import { MoodPicker } from '@/components/mood';
 import { Button, Chip, Segmented, TextArea } from '@/components/ui';
+import { Burner, isBurner } from '@/constants/burners';
 import { MOODS, MoodLevel, toMoodLevel } from '@/constants/moods';
 import { colors, fonts, radius, spacing, type } from '@/constants/theme';
 import * as api from '@/lib/api/goals';
+import { fmt } from '@/lib/dates';
+import { t } from '@/lib/i18n';
 import { useAuthStore, useEntriesStore, useGoalsStore } from '@/stores';
 import { Visibility } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,6 +39,7 @@ interface EntryDraft {
   note: string;
   visibility: Visibility;
   selectedGoalIds: string[];
+  burners?: Burner[];
   updatedAt: string;
 }
 
@@ -42,15 +47,23 @@ function areGoalIdsEqual(left: string[], right: string[]) {
   return left.length === right.length && left.every((id) => right.includes(id));
 }
 
+function areBurnersEqual(left: Burner[], right: Burner[]) {
+  return left.length === right.length && left.every((b) => right.includes(b));
+}
+
 function isVisibility(value: unknown): value is Visibility {
   return value === 'private' || value === 'friends' || value === 'public';
 }
 
-const VISIBILITY_OPTIONS: { value: Visibility; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { value: 'private', label: 'Private', icon: 'lock-closed' },
-  { value: 'friends', label: 'Friends', icon: 'people' },
-  { value: 'public', label: 'Public', icon: 'globe-outline' },
+const VISIBILITY_ICONS: { value: Visibility; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { value: 'private', icon: 'lock-closed' },
+  { value: 'friends', icon: 'people' },
+  { value: 'public', icon: 'globe-outline' },
 ];
+
+function getVisibilityOptions(): { value: Visibility; label: string; icon: keyof typeof Ionicons.glyphMap }[] {
+  return VISIBILITY_ICONS.map((option) => ({ ...option, label: t(`common.visibility.${option.value}`) }));
+}
 
 export function EntryForm({ date, onSuccess, header, emptyFooter }: EntryFormProps) {
   const insets = useSafeAreaInsets();
@@ -66,6 +79,7 @@ export function EntryForm({ date, onSuccess, header, emptyFooter }: EntryFormPro
   const [note, setNote] = useState('');
   const [visibility, setVisibility] = useState<Visibility>('private');
   const [selectedGoalIds, setSelectedGoalIds] = useState<string[]>([]);
+  const [burners, setBurners] = useState<Burner[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
   const [isDraftLoaded, setIsDraftLoaded] = useState(false);
   const [draftStatus, setDraftStatus] = useState<'idle' | 'saved' | 'restored'>('idle');
@@ -74,6 +88,12 @@ export function EntryForm({ date, onSuccess, header, emptyFooter }: EntryFormPro
 
   const isToday = isTodayDate(parsedDate);
   const existingEntry = isToday ? todayEntry : getEntryByDate(entryDate) || null;
+
+  // Burners implied by the intentions tagged today; they can't be switched off individually.
+  const impliedBurners = Array.from(
+    new Set(goals.filter((g) => selectedGoalIds.includes(g.id) && g.burner).map((g) => g.burner as Burner))
+  );
+  const effectiveBurners = Array.from(new Set([...impliedBurners, ...burners]));
 
   useEffect(() => {
     if (isToday) {
@@ -87,6 +107,7 @@ export function EntryForm({ date, onSuccess, header, emptyFooter }: EntryFormPro
       setSelectedMood(toMoodLevel(existingEntry.mood));
       setNote(existingEntry.note || '');
       setVisibility(existingEntry.visibility || 'private');
+      setBurners((existingEntry.burners || []).filter(isBurner));
 
       api
         .getGoalsForEntry(existingEntry.id)
@@ -100,6 +121,7 @@ export function EntryForm({ date, onSuccess, header, emptyFooter }: EntryFormPro
       setNote('');
       setVisibility('private');
       setSelectedGoalIds([]);
+      setBurners([]);
       setInitialGoalIds([]);
     }
   }, [existingEntry]);
@@ -122,6 +144,7 @@ export function EntryForm({ date, onSuccess, header, emptyFooter }: EntryFormPro
         if (Array.isArray(draft.selectedGoalIds)) {
           setSelectedGoalIds(draft.selectedGoalIds.filter((id): id is string => typeof id === 'string'));
         }
+        if (Array.isArray(draft.burners)) setBurners(draft.burners.filter(isBurner));
 
         setDraftStatus('restored');
       })
@@ -143,11 +166,13 @@ export function EntryForm({ date, onSuccess, header, emptyFooter }: EntryFormPro
       const noteChanged = note !== (existingEntry.note || '');
       const visibilityChanged = visibility !== (existingEntry.visibility || 'private');
       const goalsChanged = !areGoalIdsEqual(selectedGoalIds, initialGoalIds);
-      setHasChanges(moodChanged || noteChanged || goalsChanged || visibilityChanged);
+      const burnersChanged = !areBurnersEqual(effectiveBurners, (existingEntry.burners || []).filter(isBurner));
+      setHasChanges(moodChanged || noteChanged || goalsChanged || visibilityChanged || burnersChanged);
     } else {
       setHasChanges(selectedMood !== null);
     }
-  }, [selectedMood, note, visibility, existingEntry, selectedGoalIds, initialGoalIds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMood, note, visibility, existingEntry, selectedGoalIds, initialGoalIds, burners]);
 
   useEffect(() => {
     if (!isDraftLoaded) return;
@@ -156,7 +181,8 @@ export function EntryForm({ date, onSuccess, header, emptyFooter }: EntryFormPro
       ? selectedMood !== existingEntry.mood ||
         note !== (existingEntry.note || '') ||
         visibility !== (existingEntry.visibility || 'private') ||
-        !areGoalIdsEqual(selectedGoalIds, initialGoalIds)
+        !areGoalIdsEqual(selectedGoalIds, initialGoalIds) ||
+        !areBurnersEqual(effectiveBurners, (existingEntry.burners || []).filter(isBurner))
       : false;
 
     const newEntryHasContent =
@@ -164,7 +190,8 @@ export function EntryForm({ date, onSuccess, header, emptyFooter }: EntryFormPro
       (selectedMood !== null ||
         note.trim().length > 0 ||
         visibility !== 'private' ||
-        selectedGoalIds.length > 0);
+        selectedGoalIds.length > 0 ||
+        burners.length > 0);
 
     if (!existingEntryChanged && !newEntryHasContent) {
       AsyncStorage.removeItem(draftStorageKey).catch((error) => {
@@ -180,6 +207,7 @@ export function EntryForm({ date, onSuccess, header, emptyFooter }: EntryFormPro
         note,
         visibility,
         selectedGoalIds,
+        burners,
         updatedAt: new Date().toISOString(),
       };
 
@@ -191,7 +219,8 @@ export function EntryForm({ date, onSuccess, header, emptyFooter }: EntryFormPro
     }, 350);
 
     return () => clearTimeout(timeoutId);
-  }, [draftStorageKey, existingEntry, initialGoalIds, isDraftLoaded, note, selectedGoalIds, selectedMood, visibility]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftStorageKey, existingEntry, initialGoalIds, isDraftLoaded, note, selectedGoalIds, selectedMood, visibility, burners]);
 
   const toggleGoal = (goalId: string) => {
     setSelectedGoalIds((prev) =>
@@ -201,11 +230,11 @@ export function EntryForm({ date, onSuccess, header, emptyFooter }: EntryFormPro
 
   const handleSave = async () => {
     if (!selectedMood) {
-      Alert.alert('Pick a mood', 'Choose how the day felt before saving.');
+      Alert.alert(t('today.form.pickMoodTitle'), t('today.form.pickMoodMessage'));
       return;
     }
     if (!user?.id) {
-      Alert.alert('Not signed in', 'Sign in again to save your entry.');
+      Alert.alert(t('today.form.notSignedInTitle'), t('today.form.notSignedInMessage'));
       return;
     }
 
@@ -216,6 +245,7 @@ export function EntryForm({ date, onSuccess, header, emptyFooter }: EntryFormPro
         mood: selectedMood,
         note: note.trim() || null,
         visibility,
+        burners: effectiveBurners,
       });
 
       if (entry) {
@@ -236,25 +266,27 @@ export function EntryForm({ date, onSuccess, header, emptyFooter }: EntryFormPro
       setTimeout(() => setJustSaved(false), 2500);
       onSuccess?.();
     } catch (error: any) {
-      Alert.alert('Could not save', error.message || 'Please try again.');
+      Alert.alert(t('common.errors.couldNotSave'), error.message || t('common.actions.tryAgain'));
     }
   };
 
   const pendingGoals = goals.filter((g) => !g.is_completed);
   const moodInfo = selectedMood ? MOODS[selectedMood] : null;
-  const question = isToday ? 'How was your day?' : `How was ${format(parsedDate, 'EEEE, MMM d')}?`;
+  const question = isToday
+    ? t('today.form.howWasYourDay')
+    : t('today.form.howWasDay', { day: fmt(parsedDate, t('today.dates.shortWithWeekday')) });
   const notePlaceholder = moodInfo
-    ? `What made it ${moodInfo.word}?`
-    : 'Anything worth remembering?';
+    ? t('today.form.notePlaceholderMood', { word: moodInfo.word })
+    : t('today.form.notePlaceholder');
 
   const statusText = justSaved
-    ? 'Saved'
+    ? t('today.form.saved')
     : existingEntry && !hasChanges
-      ? `Logged at ${format(new Date(existingEntry.updated_at), 'h:mm a')}`
+      ? t('today.form.loggedAt', { time: fmt(new Date(existingEntry.updated_at), t('today.dates.time')) })
       : draftStatus === 'restored'
-        ? 'Draft restored'
+        ? t('today.form.draftRestored')
         : draftStatus === 'saved'
-          ? 'Draft saved on this device'
+          ? t('today.form.draftSaved')
           : null;
 
   return (
@@ -297,7 +329,7 @@ export function EntryForm({ date, onSuccess, header, emptyFooter }: EntryFormPro
 
             {pendingGoals.length > 0 && (
               <View style={styles.block}>
-                <Text style={styles.blockLabel}>Moved forward on</Text>
+                <Text style={styles.blockLabel}>{t('today.form.movedForwardOn')}</Text>
                 <View style={styles.chips}>
                   {pendingGoals.map((goal) => (
                     <Chip
@@ -313,15 +345,20 @@ export function EntryForm({ date, onSuccess, header, emptyFooter }: EntryFormPro
             )}
 
             <View style={styles.block}>
-              <Text style={styles.blockLabel}>Who can see this</Text>
-              <Segmented options={VISIBILITY_OPTIONS} value={visibility} onChange={setVisibility} />
+              <Text style={styles.blockLabel}>{t('today.form.energyQuestion')}</Text>
+              <BurnerToggles value={burners} onChange={setBurners} implied={impliedBurners} />
+            </View>
+
+            <View style={styles.block}>
+              <Text style={styles.blockLabel}>{t('today.form.whoCanSee')}</Text>
+              <Segmented options={getVisibilityOptions()} value={visibility} onChange={setVisibility} />
             </View>
           </Animated.View>
         )}
 
         <Animated.View layout={LinearTransition.duration(250)} style={styles.actions}>
           <Button
-            title={existingEntry ? 'Update entry' : isToday ? 'Save today' : 'Save entry'}
+            title={existingEntry ? t('today.form.updateEntry') : isToday ? t('today.form.saveToday') : t('today.form.saveEntry')}
             onPress={handleSave}
             disabled={!hasChanges || !selectedMood}
             loading={isLoading}

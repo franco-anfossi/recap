@@ -1,4 +1,5 @@
-import { CreateGoalInput, UpdateGoalInput, YearlyGoal } from '@/types';
+import { CreateGoalInput, GoalProgress, UpdateGoalInput, YearlyGoal } from '@/types';
+import { format, subDays } from 'date-fns';
 import { supabase } from '../supabase';
 
 async function getCurrentUserId(): Promise<string> {
@@ -47,6 +48,46 @@ export async function getGoalsByYear(year: number): Promise<YearlyGoal[]> {
 
   if (error) throw error;
   return data || [];
+}
+
+/** Progress for a set of goals: distinct tagged days, last tagged day and this week's count. */
+export async function getGoalProgress(goalIds: string[]): Promise<Record<string, GoalProgress>> {
+  const result: Record<string, GoalProgress> = {};
+  goalIds.forEach((id) => {
+    result[id] = { goalId: id, days: 0, lastDate: null, thisWeek: 0 };
+  });
+  if (goalIds.length === 0) return result;
+
+  const { data, error } = await supabase
+    .from('entry_goals')
+    .select('goal_id, entries!inner(entry_date)')
+    .in('goal_id', goalIds);
+
+  if (error) throw error;
+
+  const weekAgo = format(subDays(new Date(), 6), 'yyyy-MM-dd');
+  const seen = new Map<string, Set<string>>();
+
+  (data || []).forEach((row) => {
+    const joined = row.entries as { entry_date: string } | { entry_date: string }[] | null;
+    const entry = Array.isArray(joined) ? joined[0] : joined;
+    if (!entry) return;
+    const dates = seen.get(row.goal_id) ?? new Set<string>();
+    dates.add(entry.entry_date);
+    seen.set(row.goal_id, dates);
+  });
+
+  seen.forEach((dates, goalId) => {
+    const sorted = Array.from(dates).sort();
+    result[goalId] = {
+      goalId,
+      days: sorted.length,
+      lastDate: sorted[sorted.length - 1] ?? null,
+      thisWeek: sorted.filter((d) => d >= weekAgo).length,
+    };
+  });
+
+  return result;
 }
 
 export async function createGoal(input: CreateGoalInput): Promise<YearlyGoal> {

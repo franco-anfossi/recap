@@ -1,4 +1,5 @@
 import { colors, radius, spacing, type } from '@/constants/theme';
+import { t } from '@/lib/i18n';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React from 'react';
@@ -25,7 +26,7 @@ export function ModalHeader({ title, onClose, right, back = false }: ModalHeader
         <IconButton
           name={back ? 'chevron-back' : 'close'}
           onPress={onClose ?? (() => router.back())}
-          label={back ? 'Back' : 'Close'}
+          label={back ? t('common.actions.back') : t('common.actions.close')}
         />
         {title ? (
           <Text style={styles.title} numberOfLines={1}>

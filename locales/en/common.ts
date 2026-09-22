@@ -1,0 +1,52 @@
+export default {
+  app: 'recap',
+  tabs: {
+    today: 'Today',
+    calendar: 'Calendar',
+    insights: 'Insights',
+    friends: 'Friends',
+    you: 'You',
+  },
+  moods: {
+    1: { label: 'Awful', word: 'rough' },
+    2: { label: 'Bad', word: 'off' },
+    3: { label: 'Okay', word: 'okay' },
+    4: { label: 'Good', word: 'good' },
+    5: { label: 'Great', word: 'great' },
+  },
+  burners: {
+    health: 'Health',
+    work: 'Work',
+    family: 'Family',
+    friends: 'Friends',
+    turnedDown: 'turned down',
+    fromIntention: 'from a tagged intention',
+    daysShort: '%{count}d',
+  },
+  actions: {
+    continue: 'Continue',
+    cancel: 'Cancel',
+    save: 'Save',
+    add: 'Add',
+    delete: 'Delete',
+    close: 'Close',
+    back: 'Back',
+    skip: 'Skip',
+    tryAgain: 'Please try again.',
+    goBack: 'Go back',
+  },
+  errors: {
+    generic: 'Something went wrong. Please try again.',
+    couldNotSave: 'Could not save',
+  },
+  time: {
+    today: 'Today',
+    yesterday: 'Yesterday',
+  },
+  visibility: {
+    private: 'Private',
+    friends: 'Friends',
+    public: 'Public',
+    onlyYou: 'Only you',
+  },
+} as const;

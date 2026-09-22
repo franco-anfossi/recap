@@ -1,22 +1,26 @@
+import { BurnerTag } from '@/components/burners';
 import { MoodFace } from '@/components/mood';
 import { Button, Chip, IconButton, ModalHeader, Pill } from '@/components/ui';
+import { isBurner } from '@/constants/burners';
 import { MOODS, toMoodLevel } from '@/constants/moods';
 import { colors, fonts, radius, spacing, type } from '@/constants/theme';
 import * as goalsApi from '@/lib/api/goals';
+import { fmt, fmtCap } from '@/lib/dates';
+import { t } from '@/lib/i18n';
 import { useEntriesStore, useGoalsStore } from '@/stores';
 import { Entry, Visibility } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
-import { format, parseISO } from 'date-fns';
+import { parseISO } from 'date-fns';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const VISIBILITY: Record<Visibility, { label: string; icon: keyof typeof Ionicons.glyphMap }> = {
-  private: { label: 'Only you', icon: 'lock-closed' },
-  friends: { label: 'Friends', icon: 'people' },
-  public: { label: 'Public', icon: 'globe-outline' },
+const VISIBILITY: Record<Visibility, { labelKey: string; icon: keyof typeof Ionicons.glyphMap }> = {
+  private: { labelKey: 'common.visibility.onlyYou', icon: 'lock-closed' },
+  friends: { labelKey: 'common.visibility.friends', icon: 'people' },
+  public: { labelKey: 'common.visibility.public', icon: 'globe-outline' },
 };
 
 export default function EntryDetailScreen() {
@@ -69,10 +73,10 @@ export default function EntryDetailScreen() {
   }, [entry, fetchGoals]);
 
   const handleDelete = () => {
-    Alert.alert('Delete this entry?', 'This can’t be undone.', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('today.detail.deleteTitle'), t('today.detail.deleteMessage'), [
+      { text: t('common.actions.cancel'), style: 'cancel' },
       {
-        text: 'Delete',
+        text: t('common.actions.delete'),
         style: 'destructive',
         onPress: async () => {
           if (entry) {
@@ -105,8 +109,8 @@ export default function EntryDetailScreen() {
       <View style={styles.container}>
         <ModalHeader />
         <View style={styles.centered}>
-          <Text style={styles.notFound}>This entry isn’t available.</Text>
-          <Button title="Go back" onPress={() => router.back()} variant="secondary" />
+          <Text style={styles.notFound}>{t('today.detail.notAvailable')}</Text>
+          <Button title={t('common.actions.goBack')} onPress={() => router.back()} variant="secondary" />
         </View>
       </View>
     );
@@ -118,14 +122,15 @@ export default function EntryDetailScreen() {
   const linkedGoals = goals.filter((g) => linkedGoalIds.includes(g.id));
   const visibility = VISIBILITY[entry.visibility || 'private'];
   const wasEdited = entry.updated_at !== entry.created_at;
+  const burners = (entry.burners || []).filter(isBurner);
 
   return (
     <View style={styles.container}>
       <ModalHeader
         right={
           <>
-            <IconButton name="create-outline" onPress={handleEdit} label="Edit entry" />
-            <IconButton name="trash-outline" onPress={handleDelete} label="Delete entry" tone="danger" />
+            <IconButton name="create-outline" onPress={handleEdit} label={t('today.detail.editEntry')} />
+            <IconButton name="trash-outline" onPress={handleDelete} label={t('today.detail.deleteEntry')} tone="danger" />
           </>
         }
       />
@@ -134,7 +139,7 @@ export default function EntryDetailScreen() {
         <Animated.View entering={FadeInDown.duration(350)} style={[styles.hero, { backgroundColor: mood.tint }]}>
           <MoodFace mood={level} size={112} />
           <Text style={[styles.heroLabel, { color: mood.ink }]}>{mood.label}</Text>
-          <Text style={[styles.heroDate, { color: mood.ink }]}>{format(date, 'EEEE, MMMM d, yyyy')}</Text>
+          <Text style={[styles.heroDate, { color: mood.ink }]}>{fmtCap(date, t('today.dates.longWithYear'))}</Text>
         </Animated.View>
 
         {entry.note ? (
@@ -144,14 +149,14 @@ export default function EntryDetailScreen() {
           </Animated.View>
         ) : (
           <Animated.View entering={FadeInDown.delay(60).duration(350)} style={styles.noNote}>
-            <Text style={styles.noNoteText}>No note for this day.</Text>
-            <Button title="Add a note" variant="soft" size="sm" onPress={handleEdit} />
+            <Text style={styles.noNoteText}>{t('today.detail.noNote')}</Text>
+            <Button title={t('today.detail.addNote')} variant="soft" size="sm" onPress={handleEdit} />
           </Animated.View>
         )}
 
         {linkedGoals.length > 0 && (
           <Animated.View entering={FadeInDown.delay(120).duration(350)} style={styles.block}>
-            <Text style={styles.blockLabel}>Moved forward on</Text>
+            <Text style={styles.blockLabel}>{t('today.detail.movedForwardOn')}</Text>
             <View style={styles.chips}>
               {linkedGoals.map((g) => (
                 <Chip key={g.id} label={g.title} selected icon={g.is_completed ? 'checkmark-done' : 'flag-outline'} />
@@ -160,11 +165,22 @@ export default function EntryDetailScreen() {
           </Animated.View>
         )}
 
+        {burners.length > 0 && (
+          <Animated.View entering={FadeInDown.delay(140).duration(350)} style={styles.block}>
+            <Text style={styles.blockLabel}>{t('today.detail.energyWentTo')}</Text>
+            <View style={styles.chips}>
+              {burners.map((b) => (
+                <BurnerTag key={b} burner={b} size="md" />
+              ))}
+            </View>
+          </Animated.View>
+        )}
+
         <Animated.View entering={FadeInDown.delay(160).duration(350)} style={styles.meta}>
-          <Pill label={visibility.label} icon={visibility.icon} tone="muted" />
+          <Pill label={t(visibility.labelKey)} icon={visibility.icon} tone="muted" />
           <Text style={styles.metaText}>
-            Logged {format(new Date(entry.created_at), 'MMM d, h:mm a')}
-            {wasEdited ? ` · edited ${format(new Date(entry.updated_at), 'MMM d, h:mm a')}` : ''}
+            {t('today.detail.logged', { time: fmt(new Date(entry.created_at), t('today.dates.dateTime')) })}
+            {wasEdited ? t('today.detail.edited', { time: fmt(new Date(entry.updated_at), t('today.dates.dateTime')) }) : ''}
           </Text>
         </Animated.View>
       </ScrollView>

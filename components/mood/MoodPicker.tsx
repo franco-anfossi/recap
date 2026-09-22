@@ -1,5 +1,6 @@
 import { MOODS, MOOD_LEVELS, MoodLevel } from '@/constants/moods';
 import { colors, fonts, motion, spacing, type } from '@/constants/theme';
+import { t } from '@/lib/i18n';
 import * as Haptics from 'expo-haptics';
 import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -73,7 +74,7 @@ function MoodOption({ level, faceSize, selected, dimmed, showLabel, onPress }: M
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${info.label} mood`}
+      accessibilityLabel={t('today.mood.optionLabel', { label: info.label })}
       accessibilityState={{ selected }}
       onPressIn={() => {
         scale.value = withSpring(selected ? 1.1 : 0.92, { damping: 14 });

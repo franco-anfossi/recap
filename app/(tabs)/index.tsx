@@ -4,6 +4,8 @@ import { StreakPill } from '@/components/streak';
 import { Ionicons } from '@expo/vector-icons';
 import { toMoodLevel } from '@/constants/moods';
 import { colors, fonts, radius, spacing, type } from '@/constants/theme';
+import { fmt, fmtCap } from '@/lib/dates';
+import { t } from '@/lib/i18n';
 import { calculateCurrentStreak, greetingForHour } from '@/lib/streak';
 import { useAuthStore, useEntriesStore } from '@/stores';
 import { format, isSameDay, subDays } from 'date-fns';
@@ -45,7 +47,7 @@ export default function TodayScreen() {
     <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
       <View style={styles.headerRow}>
         <View style={styles.headerText}>
-          <Text style={styles.eyebrow}>{format(now, 'EEEE, MMMM d')}</Text>
+          <Text style={styles.eyebrow}>{fmtCap(now, t('today.dates.long'))}</Text>
           <Text style={styles.greeting}>{greeting}</Text>
         </View>
         <StreakPill streak={streak} />
@@ -58,7 +60,9 @@ export default function TodayScreen() {
             style={styles.day}
             disabled={day.isToday}
             accessibilityRole="button"
-            accessibilityLabel={`${format(day.date, 'EEEE d')}${day.entry ? ', logged' : ', no entry'}`}
+            accessibilityLabel={t(day.entry ? 'today.home.dayLogged' : 'today.home.dayEmpty', {
+              day: fmtCap(day.date, t('today.dates.weekdayWithDay')),
+            })}
             onPress={() =>
               day.entry
                 ? router.push(`/entry/${day.entry.id}`)
@@ -66,7 +70,7 @@ export default function TodayScreen() {
             }
           >
             <Text style={[styles.dayLabel, day.isToday && styles.dayLabelToday]}>
-              {format(day.date, 'EEEEE')}
+              {fmtCap(day.date, 'EEEEE')}
             </Text>
             <View style={[styles.daySlot, day.isToday && styles.daySlotToday]}>
               {day.entry ? (
@@ -91,7 +95,7 @@ export default function TodayScreen() {
     <View style={styles.footer}>
       {latest && (
         <View style={styles.footerBlock}>
-          <Text style={styles.footerLabel}>Last check-in</Text>
+          <Text style={styles.footerLabel}>{t('today.home.lastCheckIn')}</Text>
           <EntryCard entry={latest} onPress={() => router.push(`/entry/${latest.id}`)} />
         </View>
       )}
@@ -105,7 +109,8 @@ export default function TodayScreen() {
             <Ionicons name="calendar-outline" size={16} color={colors.brand} />
           </View>
           <Text style={styles.missedText}>
-            Missed {format(missed.date, 'EEEE')}? <Text style={styles.missedLink}>Add it now</Text>
+            {t('today.home.missedDay', { day: fmt(missed.date, 'EEEE') })}{' '}
+            <Text style={styles.missedLink}>{t('today.home.addItNow')}</Text>
           </Text>
         </Pressable>
       )}

@@ -1,3 +1,4 @@
+import { Burner } from '@/constants/burners';
 import { MoodLevel } from '@/constants/moods';
 import { Visibility } from './social.types';
 
@@ -11,6 +12,7 @@ export interface Entry {
   video_thumbnail_url: string | null;
   video_duration_seconds: number | null;
   visibility: Visibility;
+  burners: Burner[];
   created_at: string;
   updated_at: string;
 }
@@ -24,6 +26,7 @@ export interface CreateEntryInput {
   video_thumbnail_url?: string;
   video_duration_seconds?: number;
   visibility?: Visibility;
+  burners?: Burner[];
 }
 
 export interface UpdateEntryInput {
@@ -33,6 +36,7 @@ export interface UpdateEntryInput {
   video_thumbnail_url?: string;
   video_duration_seconds?: number;
   visibility?: Visibility;
+  burners?: Burner[];
 }
 
 export interface YearlySummary {

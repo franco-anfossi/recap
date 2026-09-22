@@ -1,9 +1,11 @@
 import { MoodFace } from '@/components/mood';
 import { MOODS, toMoodLevel } from '@/constants/moods';
 import { colors, radius, spacing, type } from '@/constants/theme';
+import { fmtCap } from '@/lib/dates';
+import { t } from '@/lib/i18n';
 import { Entry } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
-import { format, parseISO } from 'date-fns';
+import { parseISO } from 'date-fns';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -15,7 +17,7 @@ interface EntryCardProps {
 
 export function EntryCard({ entry, onPress, compact = false }: EntryCardProps) {
   const level = toMoodLevel(entry.mood);
-  const formattedDate = format(parseISO(entry.entry_date), compact ? 'MMM d' : 'EEEE, MMMM d');
+  const formattedDate = fmtCap(parseISO(entry.entry_date), t(compact ? 'today.dates.short' : 'today.dates.long'));
 
   return (
     <Pressable

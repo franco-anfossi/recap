@@ -1,13 +1,15 @@
 import * as api from '@/lib/api/goals';
-import { CreateGoalInput, UpdateGoalInput, YearlyGoal } from '@/types';
+import { CreateGoalInput, GoalProgress, UpdateGoalInput, YearlyGoal } from '@/types';
 import { create } from 'zustand';
 
 interface GoalsState {
   goals: YearlyGoal[];
+  progress: Record<string, GoalProgress>;
   isLoading: boolean;
   error: string | null;
 
   fetchGoals: (year: number) => Promise<void>;
+  fetchProgress: () => Promise<void>;
   createGoal: (input: CreateGoalInput) => Promise<void>;
   updateGoal: (id: string, input: UpdateGoalInput) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
@@ -17,16 +19,28 @@ interface GoalsState {
 
 export const useGoalsStore = create<GoalsState>((set, get) => ({
   goals: [],
+  progress: {},
   isLoading: false,
   error: null,
 
-  resetGoals: () => set({ goals: [], isLoading: false, error: null }),
+  resetGoals: () => set({ goals: [], progress: {}, isLoading: false, error: null }),
+
+  fetchProgress: async () => {
+    const ids = get().goals.map((g) => g.id);
+    try {
+      const progress = await api.getGoalProgress(ids);
+      set({ progress });
+    } catch (error: any) {
+      console.error('Error fetching goal progress:', error);
+    }
+  },
 
   fetchGoals: async (year: number) => {
     set({ isLoading: true, error: null });
     try {
       const goals = await api.getGoalsByYear(year);
       set({ goals });
+      get().fetchProgress();
     } catch (error: any) {
       set({ error: error.message });
     } finally {

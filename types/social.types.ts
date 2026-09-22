@@ -1,3 +1,5 @@
+import { Burner } from '@/constants/burners';
+
 export type Visibility = 'private' | 'friends' | 'public';
 
 export interface Follow {
@@ -20,6 +22,7 @@ export interface Profile {
   display_name: string | null;
   avatar_url: string | null;
   timezone: string;
+  dimmed_burner: Burner | null;
   created_at: string;
   updated_at: string;
 }

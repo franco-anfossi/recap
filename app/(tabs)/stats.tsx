@@ -1,9 +1,13 @@
+import { BurnerBalance } from '@/components/burners';
 import { MoodFace } from '@/components/mood';
 import { EmptyState, IconButton, Screen, ScreenHeader, StatTile } from '@/components/ui';
+import { Burner, BURNER_KEYS, BURNERS, isBurner } from '@/constants/burners';
 import { MOODS, MOOD_LEVELS, MoodLevel, toMoodLevel } from '@/constants/moods';
 import { colors, fonts, radius, spacing, type } from '@/constants/theme';
+import { fmt, fmtCap } from '@/lib/dates';
+import { t } from '@/lib/i18n';
 import { calculateCurrentStreak, calculateLongestStreak } from '@/lib/streak';
-import { useEntriesStore } from '@/stores';
+import { useAuthStore, useEntriesStore } from '@/stores';
 import { Entry } from '@/types';
 import {
   eachDayOfInterval,
@@ -13,16 +17,20 @@ import {
   isAfter,
   parseISO,
   startOfYear,
+  subDays,
 } from 'date-fns';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-const MONTHS_SHORT = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
-const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+// Localized month labels: single initial for the chart, short name for the tile.
+const MONTHS_SHORT = Array.from({ length: 12 }, (_, i) => fmtCap(new Date(2026, i, 1), 'MMMM').charAt(0));
+const MONTHS_ABBR = Array.from({ length: 12 }, (_, i) => fmtCap(new Date(2026, i, 1), 'MMM'));
 
 export default function StatsScreen() {
   const { entries, fetchEntriesByYear } = useEntriesStore();
+  const dimmed = useAuthStore((s) => s.user?.dimmed_burner ?? null);
   const [year, setYear] = useState(new Date().getFullYear());
   const isCurrentYear = year >= new Date().getFullYear();
 
@@ -36,18 +44,19 @@ export default function StatsScreen() {
   );
 
   const summary = useMemo(() => buildSummary(yearEntries, year), [yearEntries, year]);
+  const burnerSummary = useMemo(() => buildBurnerSummary(yearEntries, isCurrentYear, dimmed), [yearEntries, isCurrentYear, dimmed]);
 
   return (
     <Screen>
       <ScreenHeader
-        eyebrow="Insights"
+        eyebrow={t('insights.stats.eyebrow')}
         title={String(year)}
-        subtitle={summary ? `${summary.total} check-ins · ${summary.daysCovered}% of days so far` : undefined}
+        subtitle={summary ? t('insights.stats.subtitle', { count: summary.total, pct: summary.daysCovered }) : undefined}
         right={
           <View style={styles.nav}>
-            <IconButton name="chevron-back" onPress={() => setYear((y) => y - 1)} label="Previous year" />
+            <IconButton name="chevron-back" onPress={() => setYear((y) => y - 1)} label={t('insights.stats.previousYear')} />
             <View style={isCurrentYear && styles.navDisabled}>
-              <IconButton name="chevron-forward" onPress={() => !isCurrentYear && setYear((y) => y + 1)} label="Next year" />
+              <IconButton name="chevron-forward" onPress={() => !isCurrentYear && setYear((y) => y + 1)} label={t('insights.stats.nextYear')} />
             </View>
           </View>
         }
@@ -56,40 +65,56 @@ export default function StatsScreen() {
       {!summary ? (
         <EmptyState
           icon="stats-chart-outline"
-          title={`Nothing logged in ${year}`}
-          message="Insights appear once you have a few check-ins. Start with today."
-          action={isCurrentYear ? { label: 'Log today', onPress: () => router.navigate('/(tabs)') } : undefined}
+          title={t('insights.stats.empty.title', { year })}
+          message={t('insights.stats.empty.message')}
+          action={isCurrentYear ? { label: t('insights.stats.empty.action'), onPress: () => router.navigate('/(tabs)') } : undefined}
           style={styles.empty}
         />
       ) : (
         <>
           <View style={styles.tiles}>
             <StatTile
-              label="Average"
+              label={t('insights.stats.tiles.average')}
               value={summary.avg.toFixed(1)}
               hint={MOODS[toMoodLevel(summary.avg)].label}
               accent={MOODS[toMoodLevel(summary.avg)].ink}
             />
             <StatTile
-              label="Best month"
-              value={summary.bestMonth ? MONTHS_LONG[summary.bestMonth.index].slice(0, 3) : '–'}
-              hint={summary.bestMonth ? `${summary.bestMonth.avg.toFixed(1)} avg` : undefined}
+              label={t('insights.stats.tiles.bestMonth')}
+              value={summary.bestMonth ? MONTHS_ABBR[summary.bestMonth.index] : '–'}
+              hint={summary.bestMonth ? t('insights.stats.tiles.bestMonthHint', { avg: summary.bestMonth.avg.toFixed(1) }) : undefined}
             />
           </View>
           <View style={[styles.tiles, { marginTop: spacing.sm }]}>
-            <StatTile label="Current streak" value={`${summary.streak}d`} accent={summary.streak > 0 ? colors.brandStrong : undefined} />
-            <StatTile label="Longest streak" value={`${summary.longest}d`} />
+            <StatTile
+              label={t('insights.stats.tiles.currentStreak')}
+              value={t('insights.stats.tiles.days', { count: summary.streak })}
+              accent={summary.streak > 0 ? colors.brandStrong : undefined}
+            />
+            <StatTile label={t('insights.stats.tiles.longestStreak')} value={t('insights.stats.tiles.days', { count: summary.longest })} />
           </View>
 
-          <Section title="Month by month" caption="Average mood per month">
+          {burnerSummary && (
+            <Section title={t('insights.stats.sections.energy.title')} caption={burnerSummary.caption}>
+              <BurnerBalance counts={burnerSummary.counts} totalDays={burnerSummary.totalDays} dimmed={dimmed} />
+              {burnerSummary.note && (
+                <View style={[styles.burnerNote, { backgroundColor: burnerSummary.note.tint }]}>
+                  <Ionicons name={burnerSummary.note.icon} size={16} color={burnerSummary.note.ink} />
+                  <Text style={[styles.burnerNoteText, { color: burnerSummary.note.ink }]}>{burnerSummary.note.text}</Text>
+                </View>
+              )}
+            </Section>
+          )}
+
+          <Section title={t('insights.stats.sections.monthly.title')} caption={t('insights.stats.sections.monthly.caption')}>
             <MonthlyChart averages={summary.monthly} />
           </Section>
 
-          <Section title="The year in days" caption="One square per day">
+          <Section title={t('insights.stats.sections.heatmap.title')} caption={t('insights.stats.sections.heatmap.caption')}>
             <YearHeatmap entries={yearEntries} year={year} />
           </Section>
 
-          <Section title="Breakdown" caption="How often each mood showed up">
+          <Section title={t('insights.stats.sections.breakdown.title')} caption={t('insights.stats.sections.breakdown.caption')}>
             <Breakdown counts={summary.counts} total={summary.total} />
           </Section>
 
@@ -97,10 +122,16 @@ export default function StatsScreen() {
             <View style={styles.highlight}>
               <MoodFace mood={5} size={40} />
               <View style={styles.highlightText}>
-                <Text style={styles.highlightTitle}>Great days: {summary.counts[5]}</Text>
+                <Text style={styles.highlightTitle}>{t('insights.stats.highlight.title', { count: summary.counts[5] })}</Text>
                 <Text style={styles.highlightSub}>
-                  Most recent on {format(parseISO(summary.bestDay.entry_date), 'MMMM d')}
-                  {summary.bestDay.note ? ` — “${summary.bestDay.note.slice(0, 60)}${summary.bestDay.note.length > 60 ? '…' : ''}”` : ''}
+                  {summary.bestDay.note
+                    ? t('insights.stats.highlight.mostRecentWithNote', {
+                        date: fmt(parseISO(summary.bestDay.entry_date), t('insights.dates.monthDay')),
+                        note: `${summary.bestDay.note.slice(0, 60)}${summary.bestDay.note.length > 60 ? '…' : ''}`,
+                      })
+                    : t('insights.stats.highlight.mostRecent', {
+                        date: fmt(parseISO(summary.bestDay.entry_date), t('insights.dates.monthDay')),
+                      })}
                 </Text>
               </View>
             </View>
@@ -159,6 +190,63 @@ function buildSummary(entries: Entry[], year: number) {
     streak: calculateCurrentStreak(entries),
     longest: calculateLongestStreak(entries),
     daysCovered: Math.min(100, Math.round((total / daysSoFar) * 100)),
+  };
+}
+
+function buildBurnerSummary(entries: Entry[], isCurrentYear: boolean, dimmed: Burner | null) {
+  const tagged = entries.filter((e) => (e.burners || []).some(isBurner));
+  if (tagged.length === 0) return null;
+
+  // Current year: focus on the last 30 days so the picture reflects this season.
+  const cutoff = format(subDays(new Date(), 29), 'yyyy-MM-dd');
+  const scoped = isCurrentYear ? entries.filter((e) => e.entry_date >= cutoff) : entries;
+  const scopedTagged = scoped.filter((e) => (e.burners || []).some(isBurner));
+  const totalDays = Math.max(scoped.length, 1);
+
+  const counts = BURNER_KEYS.reduce(
+    (acc, key) => ({ ...acc, [key]: scoped.filter((e) => (e.burners || []).includes(key)).length }),
+    {} as Record<Burner, number>
+  );
+
+  let note: { text: string; icon: keyof typeof Ionicons.glyphMap; tint: string; ink: string } | null = null;
+  if (scopedTagged.length >= 5) {
+    const ranked = [...BURNER_KEYS].sort((a, b) => counts[a] - counts[b]);
+    const quiet = ranked[0];
+    const top = ranked[ranked.length - 1];
+    if (dimmed && counts[dimmed] <= counts[top] / 2) {
+      note = {
+        text: t('insights.stats.burnerNote.dimmedWorking', { burner: BURNERS[dimmed].label }),
+        icon: 'checkmark-circle-outline',
+        tint: BURNERS[dimmed].tint,
+        ink: BURNERS[dimmed].ink,
+      };
+    } else if (counts[quiet] === 0 && quiet !== dimmed) {
+      note = {
+        text: t(isCurrentYear ? 'insights.stats.burnerNote.quietRecent' : 'insights.stats.burnerNote.quietYear', {
+          burner: BURNERS[quiet].label,
+        }),
+        icon: 'flame-outline',
+        tint: BURNERS[quiet].tint,
+        ink: BURNERS[quiet].ink,
+      };
+    } else if (counts[top] > 0 && counts[quiet] < counts[top] / 4 && quiet !== dimmed) {
+      note = {
+        text: t('insights.stats.burnerNote.imbalance', {
+          top: BURNERS[top].label,
+          quiet: BURNERS[quiet].label.toLowerCase(),
+        }),
+        icon: 'scale-outline',
+        tint: colors.brandTint,
+        ink: colors.brandDeep,
+      };
+    }
+  }
+
+  return {
+    counts,
+    totalDays,
+    caption: isCurrentYear ? t('insights.stats.sections.energy.captionRecent') : t('insights.stats.sections.energy.captionYear'),
+    note,
   };
 }
 
@@ -226,7 +314,7 @@ function YearHeatmap({ entries, year }: { entries: Entry[]; year: number }) {
     weeks.forEach((week, col) => {
       week.forEach((cell) => {
         if (cell.date && cell.date.getDate() === 1) {
-          marks.push({ label: format(cell.date, 'MMM'), col });
+          marks.push({ label: fmtCap(cell.date, 'MMM'), col });
         }
       });
     });
@@ -372,6 +460,19 @@ const styles = StyleSheet.create({
   heatCell: {
     borderRadius: 3,
     backgroundColor: colors.surfaceSunken,
+  },
+  burnerNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    padding: spacing.s12,
+    borderRadius: radius.md,
+    borderCurve: 'continuous',
+  },
+  burnerNoteText: {
+    ...type.footnote,
+    flex: 1,
   },
   breakdown: {
     gap: spacing.s12,

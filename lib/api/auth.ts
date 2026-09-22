@@ -1,4 +1,6 @@
+import { Burner } from '@/constants/burners';
 import { LoginCredentials, RegisterCredentials, User } from '@/types';
+import * as Linking from 'expo-linking';
 import { supabase } from '../supabase';
 
 export async function signUp({ email, password, display_name }: RegisterCredentials) {
@@ -61,7 +63,7 @@ export async function getCurrentUser(): Promise<User | null> {
   return createdProfile;
 }
 
-export async function updateProfile(input: { display_name?: string | null }): Promise<User> {
+export async function updateProfile(input: { display_name?: string | null; dimmed_burner?: Burner | null }): Promise<User> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
@@ -76,8 +78,18 @@ export async function updateProfile(input: { display_name?: string | null }): Pr
   return data;
 }
 
+/** Permanently deletes the signed-in account and everything it owns. */
+export async function deleteAccount(): Promise<void> {
+  const { error } = await supabase.rpc('delete_own_account');
+  if (error) throw error;
+  await supabase.auth.signOut().catch(() => {});
+}
+
 export async function resetPassword(email: string) {
-  const { error } = await supabase.auth.resetPasswordForEmail(email);
+  // The link opens the app on the reset-password screen. Add this URL to the
+  // Supabase dashboard's redirect allow-list (Authentication → URL configuration).
+  const redirectTo = Linking.createURL('/reset-password');
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
   if (error) throw error;
 }
 

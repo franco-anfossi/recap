@@ -1,6 +1,8 @@
 import { EntryForm } from '@/components/entry';
 import { ModalHeader } from '@/components/ui';
 import { colors, spacing, type } from '@/constants/theme';
+import { fmtCap } from '@/lib/dates';
+import { t } from '@/lib/i18n';
 import { useEntriesStore } from '@/stores';
 import { format, isFuture, isToday, isValid, parseISO } from 'date-fns';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -28,14 +30,16 @@ export default function NewEntryScreen() {
 
   const header = (
     <View style={styles.dateBlock}>
-      <Text style={styles.eyebrow}>{existingEntry ? 'Editing' : isToday(parsed) ? 'Today' : 'Backdated entry'}</Text>
-      <Text style={styles.date}>{format(parsed, 'EEEE, MMMM d')}</Text>
+      <Text style={styles.eyebrow}>
+        {existingEntry ? t('today.new.editing') : isToday(parsed) ? t('common.time.today') : t('today.new.backdated')}
+      </Text>
+      <Text style={styles.date}>{fmtCap(parsed, t('today.dates.long'))}</Text>
     </View>
   );
 
   return (
     <View style={styles.container}>
-      <ModalHeader title={existingEntry ? 'Edit entry' : 'New entry'} onClose={() => router.back()} />
+      <ModalHeader title={existingEntry ? t('today.new.editTitle') : t('today.new.newTitle')} onClose={() => router.back()} />
       <EntryForm date={entryDate} onSuccess={() => router.back()} header={header} />
     </View>
   );

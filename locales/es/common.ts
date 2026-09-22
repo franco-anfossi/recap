@@ -1,0 +1,52 @@
+export default {
+  app: 'recap',
+  tabs: {
+    today: 'Hoy',
+    calendar: 'Calendario',
+    insights: 'Insights',
+    friends: 'Amigos',
+    you: 'Tú',
+  },
+  moods: {
+    1: { label: 'Pésimo', word: 'pesado' },
+    2: { label: 'Mal', word: 'flojo' },
+    3: { label: 'Normal', word: 'normal' },
+    4: { label: 'Bien', word: 'bueno' },
+    5: { label: 'Genial', word: 'genial' },
+  },
+  burners: {
+    health: 'Salud',
+    work: 'Trabajo',
+    family: 'Familia',
+    friends: 'Amigos',
+    turnedDown: 'a fuego bajo',
+    fromIntention: 'viene de una intención marcada',
+    daysShort: '%{count}d',
+  },
+  actions: {
+    continue: 'Continuar',
+    cancel: 'Cancelar',
+    save: 'Guardar',
+    add: 'Agregar',
+    delete: 'Eliminar',
+    close: 'Cerrar',
+    back: 'Atrás',
+    skip: 'Saltar',
+    tryAgain: 'Inténtalo de nuevo.',
+    goBack: 'Volver',
+  },
+  errors: {
+    generic: 'Algo salió mal. Inténtalo de nuevo.',
+    couldNotSave: 'No se pudo guardar',
+  },
+  time: {
+    today: 'Hoy',
+    yesterday: 'Ayer',
+  },
+  visibility: {
+    private: 'Privado',
+    friends: 'Amigos',
+    public: 'Público',
+    onlyYou: 'Solo tú',
+  },
+} as const;

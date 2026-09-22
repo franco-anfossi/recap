@@ -1,7 +1,10 @@
 import { MoodDot, MoodFace } from '@/components/mood';
 import { Button, Wordmark } from '@/components/ui';
+import { BURNER_KEYS, BURNERS } from '@/constants/burners';
 import { MOODS, MOOD_LEVELS, MoodLevel } from '@/constants/moods';
 import { colors, fonts, radius, shadows, spacing, type } from '@/constants/theme';
+import { fmtCap } from '@/lib/dates';
+import { t } from '@/lib/i18n';
 import { useOnboardingStore } from '@/stores';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -36,30 +39,37 @@ type Slide = {
 const SLIDES: Slide[] = [
   {
     key: 'checkin',
-    eyebrow: 'One tap a day',
-    title: 'How was today, honestly?',
-    body: 'Pick a face, add a line if you want. It takes ten seconds and it adds up to something.',
+    eyebrow: t('auth.welcome.slides.checkin.eyebrow'),
+    title: t('auth.welcome.slides.checkin.title'),
+    body: t('auth.welcome.slides.checkin.body'),
     art: MoodRowArt,
   },
   {
     key: 'calendar',
-    eyebrow: 'Your month, at a glance',
-    title: 'See the shape of your weeks.',
-    body: 'Every check-in lands on your calendar. Good stretches and rough patches become visible.',
+    eyebrow: t('auth.welcome.slides.calendar.eyebrow'),
+    title: t('auth.welcome.slides.calendar.title'),
+    body: t('auth.welcome.slides.calendar.body'),
     art: CalendarArt,
   },
   {
     key: 'insights',
-    eyebrow: 'Patterns, not guesses',
-    title: 'Notice what actually moves you.',
-    body: 'Monthly averages, streaks and breakdowns built from your real entries. No fluff.',
+    eyebrow: t('auth.welcome.slides.insights.eyebrow'),
+    title: t('auth.welcome.slides.insights.title'),
+    body: t('auth.welcome.slides.insights.body'),
     art: ChartArt,
   },
   {
+    key: 'burners',
+    eyebrow: t('auth.welcome.slides.burners.eyebrow'),
+    title: t('auth.welcome.slides.burners.title'),
+    body: t('auth.welcome.slides.burners.body'),
+    art: BurnersArt,
+  },
+  {
     key: 'recap',
-    eyebrow: 'At the end of the year',
-    title: 'Your year, recapped.',
-    body: 'A grounded summary of your year: best months, most common moods and the goals you kept.',
+    eyebrow: t('auth.welcome.slides.recap.eyebrow'),
+    title: t('auth.welcome.slides.recap.title'),
+    body: t('auth.welcome.slides.recap.body'),
     art: RecapArt,
   },
 ];
@@ -102,7 +112,7 @@ export default function WelcomeScreen() {
         <Wordmark size={26} />
         {!isLast && (
           <Pressable onPress={() => goTo('register')} hitSlop={8} accessibilityRole="button">
-            <Text style={styles.skip}>Skip</Text>
+            <Text style={styles.skip}>{t('auth.welcome.skip')}</Text>
           </Pressable>
         )}
       </View>
@@ -131,7 +141,7 @@ export default function WelcomeScreen() {
         </View>
 
         <Button
-          title={isLast ? 'Create your account' : 'Continue'}
+          title={isLast ? t('auth.welcome.createAccount') : t('common.actions.continue')}
           onPress={next}
           size="lg"
           fullWidth
@@ -141,7 +151,7 @@ export default function WelcomeScreen() {
 
         <Pressable onPress={() => goTo('login')} style={styles.secondary} accessibilityRole="button">
           <Text style={styles.secondaryText}>
-            Already have an account? <Text style={styles.secondaryLink}>Sign in</Text>
+            {t('auth.welcome.alreadyHaveAccount')} <Text style={styles.secondaryLink}>{t('auth.welcome.signIn')}</Text>
           </Text>
         </Pressable>
       </View>
@@ -224,7 +234,7 @@ function ArtFrame({ children }: { children: React.ReactNode }) {
 function MoodRowArt() {
   return (
     <ArtFrame>
-      <Text style={styles.artQuestion}>How was your day?</Text>
+      <Text style={styles.artQuestion}>{t('auth.welcome.art.moodQuestion')}</Text>
       <View style={styles.artMoodRow}>
         {MOOD_LEVELS.map((level) => {
           const selected = level === 4;
@@ -239,7 +249,7 @@ function MoodRowArt() {
         })}
       </View>
       <View style={styles.artNote}>
-        <Text style={styles.artNoteText}>Long walk after work. Slept well.</Text>
+        <Text style={styles.artNoteText}>{t('auth.welcome.art.moodNote')}</Text>
       </View>
     </ArtFrame>
   );
@@ -256,7 +266,7 @@ function CalendarArt() {
   return (
     <ArtFrame>
       <View style={styles.artCalHeader}>
-        <Text style={styles.artCalTitle}>September</Text>
+        <Text style={styles.artCalTitle}>{fmtCap(new Date(2026, 8, 1), 'MMMM')}</Text>
         <Ionicons name="chevron-forward" size={16} color={colors.inkMuted} />
       </View>
       <View style={styles.artGrid}>
@@ -279,7 +289,7 @@ function ChartArt() {
   return (
     <ArtFrame>
       <View style={styles.artCalHeader}>
-        <Text style={styles.artCalTitle}>Monthly average</Text>
+        <Text style={styles.artCalTitle}>{t('auth.welcome.art.monthlyAverage')}</Text>
         <View style={styles.artTrend}>
           <Ionicons name="trending-up" size={14} color={colors.success} />
           <Text style={styles.artTrendText}>+0.8</Text>
@@ -303,7 +313,39 @@ function ChartArt() {
         {MOOD_LEVELS.map((l) => (
           <MoodDot key={l} mood={l} size={10} />
         ))}
-        <Text style={styles.artLegendText}>rough to great</Text>
+        <Text style={styles.artLegendText}>{t('auth.welcome.art.legend')}</Text>
+      </View>
+    </ArtFrame>
+  );
+}
+
+const BURNER_LEVELS = { health: 0.8, work: 0.95, family: 0.6, friends: 0.25 } as const;
+
+function BurnersArt() {
+  return (
+    <ArtFrame>
+      <View style={styles.artCalHeader}>
+        <Text style={styles.artCalTitle}>{t('auth.welcome.art.energyTitle')}</Text>
+        <Text style={styles.artLegendText}>{t('auth.welcome.art.energyPeriod')}</Text>
+      </View>
+      <View style={styles.artBurners}>
+        {BURNER_KEYS.map((key) => {
+          const info = BURNERS[key];
+          const level = BURNER_LEVELS[key];
+          const dimmed = key === 'friends';
+          return (
+            <View key={key} style={[styles.artBurner, { backgroundColor: info.tint }, dimmed && styles.artBurnerDimmed]}>
+              <View style={[styles.artBurnerIcon, { backgroundColor: info.color }]}>
+                <Ionicons name={info.icon} size={16} color="#FFFFFF" />
+              </View>
+              <Text style={[styles.artBurnerLabel, { color: info.ink }]}>{info.label}</Text>
+              <View style={styles.artBurnerTrack}>
+                <View style={[styles.artBurnerFill, { width: `${level * 100}%`, backgroundColor: info.color }]} />
+              </View>
+              {dimmed && <Text style={[styles.artBurnerNote, { color: info.ink }]}>{t('common.burners.turnedDown')}</Text>}
+            </View>
+          );
+        })}
       </View>
     </ArtFrame>
   );
@@ -314,22 +356,22 @@ function RecapArt() {
     <ArtFrame>
       <View style={styles.artRecapHero}>
         <Text style={styles.artRecapYear}>2026</Text>
-        <Text style={styles.artRecapTitle}>Your year in moods</Text>
+        <Text style={styles.artRecapTitle}>{t('auth.welcome.art.recapTitle')}</Text>
       </View>
       <View style={styles.artTiles}>
         <View style={styles.artTile}>
-          <Text style={styles.artTileLabel}>Check-ins</Text>
+          <Text style={styles.artTileLabel}>{t('auth.welcome.art.checkins')}</Text>
           <Text style={styles.artTileValue}>312</Text>
         </View>
         <View style={styles.artTile}>
-          <Text style={styles.artTileLabel}>Best month</Text>
-          <Text style={styles.artTileValue}>June</Text>
+          <Text style={styles.artTileLabel}>{t('auth.welcome.art.bestMonth')}</Text>
+          <Text style={styles.artTileValue}>{fmtCap(new Date(2026, 5, 1), 'MMMM')}</Text>
         </View>
         <View style={styles.artTile}>
-          <Text style={styles.artTileLabel}>Mostly</Text>
+          <Text style={styles.artTileLabel}>{t('auth.welcome.art.mostly')}</Text>
           <View style={styles.artTileFace}>
             <MoodFace mood={4} size={22} />
-            <Text style={styles.artTileValueSm}>Good</Text>
+            <Text style={styles.artTileValueSm}>{MOODS[4].label}</Text>
           </View>
         </View>
       </View>
@@ -541,6 +583,47 @@ const styles = StyleSheet.create({
   artLegendText: {
     ...type.caption,
     marginLeft: spacing.xs,
+  },
+  artBurners: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  artBurner: {
+    width: '48%',
+    flexGrow: 1,
+    borderRadius: radius.md,
+    borderCurve: 'continuous',
+    padding: spacing.s12,
+    gap: spacing.sm,
+  },
+  artBurnerDimmed: {
+    opacity: 0.7,
+  },
+  artBurnerIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  artBurnerLabel: {
+    fontFamily: fonts.sansSemibold,
+    fontSize: 13,
+  },
+  artBurnerTrack: {
+    height: 6,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    overflow: 'hidden',
+  },
+  artBurnerFill: {
+    height: '100%',
+    borderRadius: radius.full,
+  },
+  artBurnerNote: {
+    ...type.caption,
+    fontSize: 10,
   },
   artRecapHero: {
     backgroundColor: colors.brand,

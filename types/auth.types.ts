@@ -1,9 +1,12 @@
+import { Burner } from '@/constants/burners';
+
 export interface User {
   id: string;
   email: string;
   display_name: string | null;
   avatar_url: string | null;
   timezone: string;
+  dimmed_burner: Burner | null;
   created_at: string;
   updated_at: string;
 }

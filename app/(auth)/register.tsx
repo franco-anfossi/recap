@@ -16,6 +16,7 @@ import {
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { friendlyAuthError } from '@/lib/auth-errors';
+import { t } from '@/lib/i18n';
 
 export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
@@ -29,11 +30,11 @@ export default function RegisterScreen() {
     setError(null);
 
     if (!email.trim() || !password) {
-      setError('Add an email and a password to create your account.');
+      setError(t('auth.register.errors.missingFields'));
       return;
     }
     if (password.length < 6) {
-      setError('Your password needs at least 6 characters.');
+      setError(t('auth.register.errors.passwordTooShort'));
       return;
     }
 
@@ -42,10 +43,7 @@ export default function RegisterScreen() {
 
       if (!user) {
         // Email confirmation is on: the session only exists after they confirm.
-        Alert.alert(
-          'Check your email',
-          'We sent a confirmation link. Tap it, then sign in to get started.'
-        );
+        Alert.alert(t('auth.register.confirmTitle'), t('auth.register.confirmBody'));
         router.replace('/(auth)/login');
       }
       // Otherwise the root layout sends them into setup.
@@ -70,15 +68,15 @@ export default function RegisterScreen() {
         <Wordmark size={28} />
 
         <Animated.View entering={FadeInDown.duration(400)} style={styles.header}>
-          <Text style={styles.title}>Start your recap.</Text>
-          <Text style={styles.subtitle}>One honest check-in a day. That’s the whole habit.</Text>
+          <Text style={styles.title}>{t('auth.register.title')}</Text>
+          <Text style={styles.subtitle}>{t('auth.register.subtitle')}</Text>
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(80).duration(400)} style={styles.form}>
           <Input
-            label="Name"
+            label={t('auth.register.nameLabel')}
             icon="person-outline"
-            placeholder="What should we call you?"
+            placeholder={t('auth.register.namePlaceholder')}
             value={name}
             onChangeText={setName}
             autoCapitalize="words"
@@ -88,9 +86,9 @@ export default function RegisterScreen() {
           />
 
           <Input
-            label="Email"
+            label={t('auth.register.emailLabel')}
             icon="mail-outline"
-            placeholder="you@example.com"
+            placeholder={t('auth.register.emailPlaceholder')}
             value={email}
             onChangeText={(v) => {
               setEmail(v);
@@ -104,10 +102,10 @@ export default function RegisterScreen() {
           />
 
           <Input
-            label="Password"
+            label={t('auth.register.passwordLabel')}
             icon="lock-closed-outline"
-            placeholder="At least 6 characters"
-            hint="Use something you don’t use anywhere else."
+            placeholder={t('auth.register.passwordPlaceholder')}
+            hint={t('auth.register.passwordHint')}
             value={password}
             onChangeText={(v) => {
               setPassword(v);
@@ -127,7 +125,7 @@ export default function RegisterScreen() {
           )}
 
           <Button
-            title="Create account"
+            title={t('auth.register.submit')}
             onPress={handleRegister}
             loading={isLoading}
             size="lg"
@@ -135,16 +133,14 @@ export default function RegisterScreen() {
             style={styles.submit}
           />
 
-          <Text style={styles.legal}>
-            By continuing you agree to keep your recap honest. Entries are private by default.
-          </Text>
+          <Text style={styles.legal}>{t('auth.register.legal')}</Text>
         </Animated.View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Already have an account? </Text>
+          <Text style={styles.footerText}>{t('auth.register.alreadyHaveAccount')}</Text>
           <Link href="/(auth)/login" replace asChild>
             <Pressable hitSlop={8} accessibilityRole="link">
-              <Text style={styles.link}>Sign in</Text>
+              <Text style={styles.link}>{t('auth.register.signIn')}</Text>
             </Pressable>
           </Link>
         </View>

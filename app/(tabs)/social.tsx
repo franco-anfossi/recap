@@ -1,6 +1,7 @@
 import { FeedEntry, UserCard } from '@/components/social';
 import { EmptyState, Screen, ScreenHeader } from '@/components/ui';
 import { colors, fonts, radius, spacing, type } from '@/constants/theme';
+import { t } from '@/lib/i18n';
 import { useAuthStore, useSocialStore } from '@/stores';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
@@ -75,7 +76,7 @@ export default function SocialScreen() {
       await refreshFollowing();
       fetchFeed();
     } catch (error: any) {
-      Alert.alert('Could not follow', error.message || 'Please try again.');
+      Alert.alert(t('social.alerts.couldNotFollow'), error.message || t('common.actions.tryAgain'));
     }
   };
 
@@ -85,7 +86,7 @@ export default function SocialScreen() {
       await refreshFollowing();
       fetchFeed();
     } catch (error: any) {
-      Alert.alert('Could not unfollow', error.message || 'Please try again.');
+      Alert.alert(t('social.alerts.couldNotUnfollow'), error.message || t('common.actions.tryAgain'));
     }
   };
 
@@ -99,7 +100,10 @@ export default function SocialScreen() {
         ) : undefined
       }
     >
-      <ScreenHeader eyebrow="Friends" title={mode === 'search' ? 'Find people' : 'Feed'} />
+      <ScreenHeader
+        eyebrow={t('social.header.eyebrow')}
+        title={mode === 'search' ? t('social.header.searchTitle') : t('social.header.feedTitle')}
+      />
 
       <View style={styles.searchRow}>
         <View style={[styles.search, mode === 'search' && styles.searchActive]}>
@@ -107,7 +111,7 @@ export default function SocialScreen() {
           <TextInput
             ref={inputRef}
             style={styles.searchInput}
-            placeholder="Search by name or email"
+            placeholder={t('social.search.placeholder')}
             placeholderTextColor={colors.inkMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -118,14 +122,14 @@ export default function SocialScreen() {
             selectionColor={colors.brand}
           />
           {searchQuery.length > 0 && (
-            <Pressable onPress={() => setSearchQuery('')} hitSlop={8} accessibilityLabel="Clear search">
+            <Pressable onPress={() => setSearchQuery('')} hitSlop={8} accessibilityLabel={t('social.search.clear')}>
               <Ionicons name="close-circle" size={18} color={colors.inkMuted} />
             </Pressable>
           )}
         </View>
         {mode === 'search' && (
           <Pressable onPress={closeSearch} hitSlop={8} accessibilityRole="button">
-            <Text style={styles.cancel}>Cancel</Text>
+            <Text style={styles.cancel}>{t('common.actions.cancel')}</Text>
           </Pressable>
         )}
       </View>
@@ -134,10 +138,10 @@ export default function SocialScreen() {
         <View style={styles.results}>
           {searchQuery.trim().length <= 2 ? (
             <View style={styles.hint}>
-              <Text style={styles.hintText}>Type at least 3 characters to search.</Text>
+              <Text style={styles.hintText}>{t('social.search.hint')}</Text>
               {following.length > 0 && (
                 <>
-                  <Text style={styles.followingTitle}>Following</Text>
+                  <Text style={styles.followingTitle}>{t('social.search.followingTitle')}</Text>
                   <View style={styles.list}>
                     {following.map((u, i) => (
                       <UserCard
@@ -155,7 +159,11 @@ export default function SocialScreen() {
           ) : isSearching ? (
             <ActivityIndicator color={colors.brand} style={styles.spinner} />
           ) : searchResults.length === 0 ? (
-            <EmptyState icon="person-outline" title="No one found" message="Try their name or the email they signed up with." />
+            <EmptyState
+              icon="person-outline"
+              title={t('social.search.noResults.title')}
+              message={t('social.search.noResults.message')}
+            />
           ) : (
             <View style={styles.list}>
               {searchResults.map((u, i) => (
@@ -176,9 +184,9 @@ export default function SocialScreen() {
       ) : feed.length === 0 ? (
         <EmptyState
           icon="people-outline"
-          title="Your feed is quiet"
-          message="Follow a few friends to see their daily recaps here. Public entries show up too."
-          action={{ label: 'Find friends', onPress: openSearch }}
+          title={t('social.feed.empty.title')}
+          message={t('social.feed.empty.message')}
+          action={{ label: t('social.feed.empty.action'), onPress: openSearch }}
           style={styles.empty}
         />
       ) : (

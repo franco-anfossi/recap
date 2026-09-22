@@ -1,7 +1,10 @@
+import { BurnerPicker } from '@/components/burners';
 import { MoodFace, MoodPicker } from '@/components/mood';
 import { Button, Input, TextArea, Wordmark } from '@/components/ui';
+import { Burner, BURNERS } from '@/constants/burners';
 import { MOODS, MoodLevel } from '@/constants/moods';
 import { colors, fonts, radius, spacing, type } from '@/constants/theme';
+import { t } from '@/lib/i18n';
 import { useAuthStore, useEntriesStore, useGoalsStore, useOnboardingStore } from '@/stores';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -26,14 +29,15 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const STEPS = ['name', 'mood', 'intention', 'done'] as const;
+const STEPS = ['name', 'mood', 'intention', 'focus', 'done'] as const;
 type Step = (typeof STEPS)[number];
 
-const SUGGESTED_INTENTIONS = [
-  'Move my body most days',
-  'Read more, scroll less',
-  'Call a friend every week',
-  'Sleep before midnight',
+const SUGGESTED_INTENTIONS: { title: string; burner: Burner }[] = [
+  { title: t('auth.setup.steps.intention.suggestions.move'), burner: 'health' },
+  { title: t('auth.setup.steps.intention.suggestions.read'), burner: 'health' },
+  { title: t('auth.setup.steps.intention.suggestions.call'), burner: 'friends' },
+  { title: t('auth.setup.steps.intention.suggestions.dinner'), burner: 'family' },
+  { title: t('auth.setup.steps.intention.suggestions.leave'), burner: 'work' },
 ];
 
 export default function SetupScreen() {
@@ -48,6 +52,8 @@ export default function SetupScreen() {
   const [mood, setMood] = useState<MoodLevel | null>(null);
   const [note, setNote] = useState('');
   const [intention, setIntention] = useState('');
+  const [intentionBurner, setIntentionBurner] = useState<Burner | null>(null);
+  const [dimmed, setDimmed] = useState<Burner | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,7 +88,7 @@ export default function SetupScreen() {
   const submitName = async () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      setError('Add a name so your recap feels like yours.');
+      setError(t('auth.setup.steps.name.errors.empty'));
       return;
     }
     if (trimmed === (user?.display_name ?? '')) {
@@ -94,7 +100,7 @@ export default function SetupScreen() {
       await updateProfile({ display_name: trimmed });
       advance();
     } catch (err: any) {
-      setError(err?.message || 'Could not save your name.');
+      setError(err?.message || t('auth.setup.steps.name.errors.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -113,7 +119,7 @@ export default function SetupScreen() {
       });
       advance();
     } catch (err: any) {
-      setError(err?.message || 'Could not save your first check-in.');
+      setError(err?.message || t('auth.setup.steps.mood.errors.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -125,12 +131,32 @@ export default function SetupScreen() {
       advance();
       return;
     }
+    if (!intentionBurner) {
+      setError(t('auth.setup.steps.intention.errors.noBurner'));
+      return;
+    }
     setSaving(true);
     try {
-      await createGoal({ year: new Date().getFullYear(), title: trimmed });
+      await createGoal({ year: new Date().getFullYear(), title: trimmed, burner: intentionBurner });
       advance();
     } catch (err: any) {
-      setError(err?.message || 'Could not save your intention.');
+      setError(err?.message || t('auth.setup.steps.intention.errors.saveFailed'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitFocus = async () => {
+    if (!dimmed) {
+      advance();
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateProfile({ dimmed_burner: dimmed });
+      advance();
+    } catch (err: any) {
+      setError(err?.message || t('auth.setup.steps.focus.errors.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -146,7 +172,7 @@ export default function SetupScreen() {
       <View style={[styles.topBar, { paddingTop: insets.top + spacing.md }]}>
         <View style={styles.topRow}>
           {stepIndex > 0 && step !== 'done' ? (
-            <Pressable onPress={back} hitSlop={8} accessibilityRole="button" accessibilityLabel="Back">
+            <Pressable onPress={back} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('common.actions.back')}>
               <Ionicons name="chevron-back" size={22} color={colors.ink} />
             </Pressable>
           ) : (
@@ -167,11 +193,11 @@ export default function SetupScreen() {
       >
         {step === 'name' && (
           <Animated.View key="name" entering={FadeInDown.duration(350)} exiting={FadeOut.duration(150)} style={styles.step}>
-            <Text style={styles.eyebrow}>Step 1 of 3</Text>
-            <Text style={styles.title}>What should we call you?</Text>
-            <Text style={styles.body}>This is how you’ll show up to friends who follow your recaps.</Text>
+            <Text style={styles.eyebrow}>{t('auth.setup.steps.name.eyebrow')}</Text>
+            <Text style={styles.title}>{t('auth.setup.steps.name.title')}</Text>
+            <Text style={styles.body}>{t('auth.setup.steps.name.body')}</Text>
             <Input
-              placeholder="Your name"
+              placeholder={t('auth.setup.steps.name.placeholder')}
               value={name}
               onChangeText={(v) => {
                 setName(v);
@@ -184,24 +210,24 @@ export default function SetupScreen() {
               containerStyle={styles.field}
             />
             {error && <Text style={styles.error}>{error}</Text>}
-            <Button title="Continue" onPress={submitName} loading={saving} size="lg" fullWidth />
+            <Button title={t('common.actions.continue')} onPress={submitName} loading={saving} size="lg" fullWidth />
           </Animated.View>
         )}
 
         {step === 'mood' && (
           <Animated.View key="mood" entering={FadeInDown.duration(350)} exiting={FadeOut.duration(150)} style={styles.step}>
-            <Text style={styles.eyebrow}>Step 2 of 3 · Your first check-in</Text>
+            <Text style={styles.eyebrow}>{t('auth.setup.steps.mood.eyebrow')}</Text>
             <Text style={styles.title}>
-              How’s today going{firstName ? `, ${firstName}` : ''}?
+              {firstName ? t('auth.setup.steps.mood.titleNamed', { name: firstName }) : t('auth.setup.steps.mood.title')}
             </Text>
-            <Text style={styles.body}>No wrong answers. This becomes day one of your recap.</Text>
+            <Text style={styles.body}>{t('auth.setup.steps.mood.body')}</Text>
             <View style={styles.pickerCard}>
               <MoodPicker selectedMood={mood} onSelect={setMood} size="lg" />
             </View>
             {mood && (
               <Animated.View entering={FadeIn.duration(250)}>
                 <TextArea
-                  placeholder={`What made it ${MOODS[mood].word}?`}
+                  placeholder={t('auth.setup.steps.mood.notePlaceholder', { word: MOODS[mood].word })}
                   value={note}
                   onChangeText={setNote}
                   maxLength={280}
@@ -211,7 +237,7 @@ export default function SetupScreen() {
             )}
             {error && <Text style={styles.error}>{error}</Text>}
             <Button
-              title="Save my first check-in"
+              title={t('auth.setup.steps.mood.submit')}
               onPress={submitMood}
               disabled={!mood}
               loading={saving}
@@ -223,13 +249,11 @@ export default function SetupScreen() {
 
         {step === 'intention' && (
           <Animated.View key="intention" entering={FadeInDown.duration(350)} exiting={FadeOut.duration(150)} style={styles.step}>
-            <Text style={styles.eyebrow}>Step 3 of 3 · Optional</Text>
-            <Text style={styles.title}>One intention for {new Date().getFullYear()}.</Text>
-            <Text style={styles.body}>
-              You’ll be able to tag check-ins that moved it forward. Keep it small and real.
-            </Text>
+            <Text style={styles.eyebrow}>{t('auth.setup.steps.intention.eyebrow')}</Text>
+            <Text style={styles.title}>{t('auth.setup.steps.intention.title', { year: new Date().getFullYear() })}</Text>
+            <Text style={styles.body}>{t('auth.setup.steps.intention.body')}</Text>
             <Input
-              placeholder="e.g. Run twice a week"
+              placeholder={t('auth.setup.steps.intention.placeholder')}
               value={intention}
               onChangeText={setIntention}
               autoCapitalize="sentences"
@@ -240,25 +264,64 @@ export default function SetupScreen() {
             <View style={styles.suggestions}>
               {SUGGESTED_INTENTIONS.map((s) => (
                 <Pressable
-                  key={s}
-                  onPress={() => setIntention(s)}
+                  key={s.title}
+                  onPress={() => {
+                    setIntention(s.title);
+                    setIntentionBurner(s.burner);
+                    setError(null);
+                  }}
                   accessibilityRole="button"
                   style={({ pressed }) => [
                     styles.suggestion,
-                    intention === s && styles.suggestionActive,
+                    intention === s.title && styles.suggestionActive,
                     pressed && { opacity: 0.8 },
                   ]}
                 >
-                  <Text style={[styles.suggestionText, intention === s && styles.suggestionTextActive]}>{s}</Text>
+                  <Text style={[styles.suggestionText, intention === s.title && styles.suggestionTextActive]}>{s.title}</Text>
                 </Pressable>
               ))}
             </View>
+            {intention.trim().length > 0 && (
+              <Animated.View entering={FadeIn.duration(250)} style={styles.burnerBlock}>
+                <Text style={styles.blockLabel}>{t('auth.setup.steps.intention.burnerLabel')}</Text>
+                <BurnerPicker
+                  value={intentionBurner}
+                  onChange={(b) => {
+                    setIntentionBurner(b);
+                    setError(null);
+                  }}
+                />
+              </Animated.View>
+            )}
             {error && <Text style={styles.error}>{error}</Text>}
             <Button
-              title={intention.trim() ? 'Set intention' : 'Skip for now'}
+              title={intention.trim() ? t('auth.setup.steps.intention.submit') : t('auth.setup.steps.intention.skip')}
               onPress={submitIntention}
               loading={saving}
               variant={intention.trim() ? 'primary' : 'secondary'}
+              size="lg"
+              fullWidth
+            />
+          </Animated.View>
+        )}
+
+        {step === 'focus' && (
+          <Animated.View key="focus" entering={FadeInDown.duration(350)} exiting={FadeOut.duration(150)} style={styles.step}>
+            <Text style={styles.eyebrow}>{t('auth.setup.steps.focus.eyebrow')}</Text>
+            <Text style={styles.title}>{t('auth.setup.steps.focus.title')}</Text>
+            <Text style={styles.body}>{t('auth.setup.steps.focus.body')}</Text>
+            <BurnerPicker value={dimmed} onChange={setDimmed} allowNone />
+            <Text style={styles.hint}>
+              {dimmed
+                ? t('auth.setup.steps.focus.hintDimmed', { burner: BURNERS[dimmed].label })
+                : t('auth.setup.steps.focus.hintNone')}
+            </Text>
+            {error && <Text style={styles.error}>{error}</Text>}
+            <Button
+              title={dimmed ? t('auth.setup.steps.focus.submitDimmed', { burner: BURNERS[dimmed].label }) : t('auth.setup.steps.focus.submitNone')}
+              onPress={submitFocus}
+              loading={saving}
+              variant={dimmed ? 'primary' : 'secondary'}
               size="lg"
               fullWidth
             />
@@ -273,19 +336,18 @@ export default function SetupScreen() {
               </View>
               <View style={styles.doneBadge}>
                 <Ionicons name="flame" size={14} color={colors.inkOnBrand} />
-                <Text style={styles.doneBadgeText}>Day 1</Text>
+                <Text style={styles.doneBadgeText}>{t('auth.setup.steps.done.badge')}</Text>
               </View>
             </View>
-            <Text style={[styles.title, styles.center]}>You’re all set{firstName ? `, ${firstName}` : ''}.</Text>
-            <Text style={[styles.body, styles.center]}>
-              Your first check-in is saved. Come back tomorrow and the streak begins.
-            </Text>
+            <Text style={[styles.title, styles.center]}>{firstName ? t('auth.setup.steps.done.titleNamed', { name: firstName }) : t('auth.setup.steps.done.title')}</Text>
+            <Text style={[styles.body, styles.center]}>{t('auth.setup.steps.done.body')}</Text>
             <View style={styles.tips}>
-              <Tip icon="today-outline" text="Log once a day. Backdate from the calendar if you miss one." />
-              <Tip icon="lock-closed-outline" text="Entries are private unless you choose to share them." />
-              <Tip icon="sparkles-outline" text="Your yearly recap builds itself as you go." />
+              <Tip icon="today-outline" text={t('auth.setup.steps.done.tips.daily')} />
+              <Tip icon="flame-outline" text={t('auth.setup.steps.done.tips.burners')} />
+              <Tip icon="lock-closed-outline" text={t('auth.setup.steps.done.tips.private')} />
+              <Tip icon="sparkles-outline" text={t('auth.setup.steps.done.tips.recap')} />
             </View>
-            <Button title="Open recap" onPress={finish} size="lg" fullWidth icon="arrow-forward" iconPosition="right" />
+            <Button title={t('auth.setup.steps.done.submit')} onPress={finish} size="lg" fullWidth icon="arrow-forward" iconPosition="right" />
           </Animated.View>
         )}
       </ScrollView>
@@ -363,6 +425,10 @@ const styles = StyleSheet.create({
     ...type.footnote,
     color: colors.danger,
   },
+  hint: {
+    ...type.footnote,
+    color: colors.inkMuted,
+  },
   pickerCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
@@ -371,6 +437,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  burnerBlock: {
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  blockLabel: {
+    ...type.label,
   },
   suggestions: {
     flexDirection: 'row',

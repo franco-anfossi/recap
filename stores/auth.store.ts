@@ -1,3 +1,4 @@
+import { Burner } from '@/constants/burners';
 import * as authApi from '@/lib/api/auth';
 import { User } from '@/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -13,16 +14,20 @@ interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
   error: string | null;
+  /** True while the user arrived through a password-recovery link and must set a new password. */
+  passwordRecovery: boolean;
 
   // Actions
   setUser: (user: User | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  setPasswordRecovery: (value: boolean) => void;
   signIn: (email: string, password: string) => Promise<User | null>;
   signUp: (email: string, password: string, displayName?: string) => Promise<User | null>;
   signOut: () => Promise<void>;
   checkAuth: () => Promise<void>;
-  updateProfile: (input: { display_name?: string | null }) => Promise<void>;
+  updateProfile: (input: { display_name?: string | null; dimmed_burner?: Burner | null }) => Promise<void>;
+  deleteAccount: () => Promise<void>;
   clearError: () => void;
 }
 
@@ -33,7 +38,9 @@ export const useAuthStore = create<AuthState>()(
       isLoading: true,
       isAuthenticated: false,
       error: null,
+      passwordRecovery: false,
 
+      setPasswordRecovery: (passwordRecovery) => set({ passwordRecovery }),
       setUser: (user) => set({ user, isAuthenticated: !!user }),
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
@@ -89,6 +96,20 @@ export const useAuthStore = create<AuthState>()(
       updateProfile: async (input) => {
         const user = await authApi.updateProfile(input);
         set({ user });
+      },
+
+      deleteAccount: async () => {
+        set({ isLoading: true });
+        try {
+          await authApi.deleteAccount();
+          useEntriesStore.getState().resetEntries();
+          useGoalsStore.getState().resetGoals();
+          useSocialStore.getState().resetSocial();
+          set({ user: null, isAuthenticated: false, isLoading: false });
+        } catch (error: any) {
+          set({ error: error.message, isLoading: false });
+          throw error;
+        }
       },
 
       checkAuth: async () => {

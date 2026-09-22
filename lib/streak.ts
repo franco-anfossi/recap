@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { Entry } from '@/types';
 import { differenceInCalendarDays, format, parseISO, subDays } from 'date-fns';
 
@@ -47,8 +48,8 @@ export function calculateLongestStreak(entries: Pick<Entry, 'entry_date'>[]): nu
 }
 
 export function greetingForHour(hour: number): string {
-  if (hour < 5) return 'Still up';
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
+  if (hour < 5) return t('today.greeting.stillUp');
+  if (hour < 12) return t('today.greeting.morning');
+  if (hour < 18) return t('today.greeting.afternoon');
+  return t('today.greeting.evening');
 }

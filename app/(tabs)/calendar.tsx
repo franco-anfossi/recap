@@ -2,6 +2,8 @@ import { MoodFace } from '@/components/mood';
 import { IconButton, Pill, Screen, ScreenHeader } from '@/components/ui';
 import { MOODS, MOOD_LEVELS, toMoodLevel } from '@/constants/moods';
 import { colors, fonts, radius, spacing, type } from '@/constants/theme';
+import { fmt, fmtCap } from '@/lib/dates';
+import { t } from '@/lib/i18n';
 import { useEntriesStore } from '@/stores';
 import { Entry } from '@/types';
 import {
@@ -23,7 +25,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
-const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+// Localized single-letter weekday headers, Sunday first (2026-01-04 is a Sunday).
+const WEEKDAYS = Array.from({ length: 7 }, (_, i) => fmt(new Date(2026, 0, 4 + i), 'EEEEE').toUpperCase());
 
 export default function CalendarScreen() {
   const [currentMonth, setCurrentMonth] = useState(startOfMonth(new Date()));
@@ -87,13 +90,13 @@ export default function CalendarScreen() {
   return (
     <Screen>
       <ScreenHeader
-        eyebrow={format(currentMonth, 'yyyy')}
-        title={format(currentMonth, 'MMMM')}
+        eyebrow={fmt(currentMonth, 'yyyy')}
+        title={fmtCap(currentMonth, 'MMMM')}
         right={
           <View style={styles.nav}>
-            <IconButton name="chevron-back" onPress={goToPreviousMonth} label="Previous month" />
+            <IconButton name="chevron-back" onPress={goToPreviousMonth} label={t('insights.calendar.previousMonth')} />
             <View style={isViewingCurrentMonth && styles.navDisabled}>
-              <IconButton name="chevron-forward" onPress={goToNextMonth} label="Next month" />
+              <IconButton name="chevron-forward" onPress={goToNextMonth} label={t('insights.calendar.nextMonth')} />
             </View>
           </View>
         }
@@ -124,7 +127,11 @@ export default function CalendarScreen() {
                 onPress={() => handleDayPress(date, entry)}
                 disabled={future}
                 accessibilityRole="button"
-                accessibilityLabel={`${format(date, 'MMMM d')}${mood ? `, ${MOODS[mood].label}` : ''}`}
+                accessibilityLabel={
+                  mood
+                    ? t('insights.calendar.dayLabel', { date: fmtCap(date, t('insights.dates.monthDay')), mood: MOODS[mood].label })
+                    : fmtCap(date, t('insights.dates.monthDay'))
+                }
               >
                 <View style={[styles.cellInner, current && styles.cellToday]}>
                   {mood ? (
@@ -157,10 +164,10 @@ export default function CalendarScreen() {
             <MoodFace mood={summary.top} size={44} />
             <View style={styles.summaryText}>
               <Text style={styles.summaryTitle}>
-                Mostly {MOODS[summary.top].label.toLowerCase()} this month
+                {t('insights.calendar.summary.title', { mood: MOODS[summary.top].label.toLowerCase() })}
               </Text>
               <Text style={styles.summarySub}>
-                {summary.count} check-in{summary.count === 1 ? '' : 's'} · average {summary.avg.toFixed(1)} / 5
+                {t('insights.calendar.summary.subtitle', { count: summary.count, avg: summary.avg.toFixed(1) })}
               </Text>
             </View>
           </View>
@@ -175,8 +182,8 @@ export default function CalendarScreen() {
         </View>
       ) : (
         <View style={styles.summaryEmpty}>
-          <Pill label="No check-ins yet this month" tone="muted" icon="calendar-outline" />
-          <Text style={styles.summaryHint}>Tap any past day to add one.</Text>
+          <Pill label={t('insights.calendar.empty.pill')} tone="muted" icon="calendar-outline" />
+          <Text style={styles.summaryHint}>{t('insights.calendar.empty.hint')}</Text>
         </View>
       )}
     </Screen>

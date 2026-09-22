@@ -1,4 +1,5 @@
 import { colors, fonts, radius, spacing, type } from '@/constants/theme';
+import { t } from '@/lib/i18n';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -13,7 +14,7 @@ export function StreakPill({ streak }: StreakPillProps) {
   return (
     <View
       style={[styles.pill, !active && styles.pillInactive]}
-      accessibilityLabel={`${streak} day streak`}
+      accessibilityLabel={t('today.streak.pillLabel', { count: streak })}
     >
       <Ionicons name="flame" size={16} color={active ? colors.brand : colors.inkMuted} />
       <Text style={[styles.pillNumber, !active && styles.pillNumberInactive]}>{streak}</Text>
@@ -40,9 +41,7 @@ export function StreakCard({ streak, compact = false }: StreakCardProps) {
           <Ionicons name="flame" size={22} color={isActive ? colors.inkOnBrand : colors.inkMuted} />
         </View>
         <View style={styles.cardText}>
-          <Text style={styles.cardTitle}>
-            {streak} day{streak === 1 ? '' : 's'} in a row
-          </Text>
+          <Text style={styles.cardTitle}>{t('today.streak.daysInARow', { count: streak })}</Text>
           <Text style={styles.cardMessage}>{message}</Text>
         </View>
       </View>
@@ -56,12 +55,12 @@ export function StreakCard({ streak, compact = false }: StreakCardProps) {
 }
 
 function getMessage(streak: number) {
-  if (streak === 0) return 'Log today to start a streak.';
-  if (streak === 1) return 'Great start. Come back tomorrow.';
-  if (streak < 7) return "You're building a habit.";
-  if (streak < 30) return 'A full week and counting.';
-  if (streak < 100) return "You're on fire.";
-  return 'Legendary consistency.';
+  if (streak === 0) return t('today.streak.messages.none');
+  if (streak === 1) return t('today.streak.messages.one');
+  if (streak < 7) return t('today.streak.messages.building');
+  if (streak < 30) return t('today.streak.messages.week');
+  if (streak < 100) return t('today.streak.messages.fire');
+  return t('today.streak.messages.legendary');
 }
 
 const styles = StyleSheet.create({
