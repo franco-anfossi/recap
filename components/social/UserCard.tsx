@@ -1,94 +1,77 @@
-import { Button } from '@/components/ui';
-import { colors, spacing, typography } from '@/constants/theme';
+import { Avatar, Button } from '@/components/ui';
+import { colors, spacing, type } from '@/constants/theme';
 import { Profile } from '@/types';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 interface UserCardProps {
   user: Profile;
-  isFollowing?: boolean; // If null/undefined, don't show follow button (e.g. self)
+  isFollowing?: boolean; // undefined hides the follow button (e.g. self)
   onFollow?: () => void;
   onUnfollow?: () => void;
   onPress?: () => void;
+  last?: boolean;
 }
 
-export function UserCard({ user, isFollowing, onFollow, onUnfollow, onPress }: UserCardProps) {
+export function UserCard({ user, isFollowing, onFollow, onUnfollow, onPress, last = false }: UserCardProps) {
   const handleAction = () => {
-    if (isFollowing) {
-      onUnfollow?.();
-    } else {
-      onFollow?.();
-    }
+    if (isFollowing) onUnfollow?.();
+    else onFollow?.();
   };
 
   return (
-    <TouchableOpacity
-      style={styles.container}
+    <Pressable
+      style={({ pressed }) => [styles.row, !last && styles.divider, pressed && onPress && styles.pressed]}
       onPress={onPress}
       disabled={!onPress}
-      activeOpacity={0.7}
+      accessibilityRole={onPress ? 'button' : undefined}
     >
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>
-          {user.display_name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
+      <Avatar name={user.display_name} fallback={user.email} size={44} />
+      <View style={styles.info}>
+        <Text style={styles.name} numberOfLines={1}>
+          {user.display_name || 'Anonymous'}
+        </Text>
+        <Text style={styles.email} numberOfLines={1}>
+          {user.email}
         </Text>
       </View>
-
-      <View style={styles.info}>
-        <Text style={styles.name}>{user.display_name || 'User'}</Text>
-        <Text style={styles.email} numberOfLines={1}>{user.email}</Text>
-      </View>
-
       {isFollowing !== undefined && (
         <Button
           title={isFollowing ? 'Following' : 'Follow'}
           variant={isFollowing ? 'secondary' : 'primary'}
           size="sm"
           onPress={handleAction}
-          style={styles.button}
+          icon={isFollowing ? 'checkmark' : undefined}
         />
       )}
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing.md,
+    gap: spacing.s12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.s12,
     backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[100],
   },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.primary[100],
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.md,
+  divider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
-  avatarText: {
-    fontSize: typography.sizes.lg,
-    fontWeight: 'bold',
-    color: colors.primary[600],
+  pressed: {
+    backgroundColor: colors.surfaceMuted,
   },
   info: {
     flex: 1,
-    marginRight: spacing.md,
+    gap: 2,
   },
   name: {
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.bold,
-    color: colors.text.primary,
+    ...type.headline,
   },
   email: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.secondary,
-  },
-  button: {
-    minWidth: 90,
+    ...type.footnote,
   },
 });

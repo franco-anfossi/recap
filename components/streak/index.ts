@@ -1,1 +1,1 @@
-export { StreakCard } from './StreakCard';
+export { StreakCard, StreakPill } from './StreakCard';

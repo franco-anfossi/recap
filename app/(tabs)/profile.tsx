@@ -1,282 +1,323 @@
 import { AddGoalModal, GoalItem } from '@/components/goals';
-import { Button, Card } from '@/components/ui';
-import { colors, spacing, typography } from '@/constants/theme';
+import { MoodFace } from '@/components/mood';
+import {
+  Avatar,
+  ListGroup,
+  ListRow,
+  Screen,
+  ScreenHeader,
+  SectionHeader,
+  StatTile,
+} from '@/components/ui';
+import { MOODS, toMoodLevel } from '@/constants/moods';
+import { colors, fonts, radius, shadows, spacing, type } from '@/constants/theme';
+import { calculateCurrentStreak } from '@/lib/streak';
 import { useAuthStore, useEntriesStore, useGoalsStore, useSocialStore } from '@/stores';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuthStore();
   const { entries, fetchEntriesByYear } = useEntriesStore();
   const { goals, fetchGoals, createGoal, toggleCompletion, deleteGoal } = useGoalsStore();
   const { stats: socialStats, fetchStats: fetchSocialStats } = useSocialStore();
-
-  const [stats, setStats] = useState({
-    totalEntries: 0,
-    averageMood: 0,
-  });
-
   const [isGoalModalVisible, setGoalModalVisible] = useState(false);
 
-  useEffect(() => {
-    if (entries.length > 0) {
-      const moodSum = entries.reduce((sum, e) => sum + e.mood, 0);
-      const avgMood = moodSum / entries.length;
-
-      setStats({
-        totalEntries: entries.length,
-        averageMood: avgMood,
-      });
-    } else {
-      setStats({
-        totalEntries: 0,
-        averageMood: 0,
-      });
-    }
-  }, [entries]);
+  const year = new Date().getFullYear();
 
   useEffect(() => {
     if (user?.id) {
-      const currentYear = new Date().getFullYear();
-      fetchEntriesByYear(currentYear);
-      fetchGoals(currentYear);
+      fetchEntriesByYear(year);
+      fetchGoals(year);
       fetchSocialStats(user.id);
     }
-  }, [fetchEntriesByYear, fetchGoals, fetchSocialStats, user?.id]);
+  }, [fetchEntriesByYear, fetchGoals, fetchSocialStats, user?.id, year]);
 
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-      router.replace('/(auth)/login');
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
+  const yearEntries = useMemo(() => entries.filter((e) => e.entry_date.startsWith(String(year))), [entries, year]);
+
+  const stats = useMemo(() => {
+    const total = yearEntries.length;
+    const avg = total > 0 ? yearEntries.reduce((s, e) => s + e.mood, 0) / total : 0;
+    return { total, avg, streak: calculateCurrentStreak(entries) };
+  }, [yearEntries, entries]);
+
+  const completedGoals = goals.filter((g) => g.is_completed).length;
+
+  const handleSignOut = () => {
+    Alert.alert('Sign out', 'You can sign back in any time.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign out',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await signOut();
+          } catch (error) {
+            console.error('Error signing out:', error);
+          }
+        },
+      },
+    ]);
   };
 
   const handleAddGoal = async (title: string, description?: string) => {
     try {
-      await createGoal({
-        year: new Date().getFullYear(),
-        title,
-        description,
-      });
+      await createGoal({ year, title, description });
     } catch {
-      Alert.alert('Error', 'Failed to add goal');
+      Alert.alert('Could not add goal', 'Please try again.');
     }
   };
 
   const handleDeleteGoal = (id: string) => {
-    Alert.alert(
-      'Delete Goal',
-      'Are you sure you want to delete this goal?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => deleteGoal(id)
-        }
-      ]
-    );
+    Alert.alert('Delete goal', 'This removes the goal and its links to past entries.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteGoal(id) },
+    ]);
   };
 
   if (!user) return null;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {user.display_name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
+    <Screen>
+      <ScreenHeader title="You" eyebrow="Profile" />
+
+      <View style={styles.identity}>
+        <Avatar name={user.display_name} fallback={user.email} size={64} />
+        <View style={styles.identityText}>
+          <Text style={styles.name}>{user.display_name || 'Anonymous'}</Text>
+          <Text style={styles.email} numberOfLines={1}>
+            {user.email}
           </Text>
         </View>
-        <Text style={styles.name}>{user.display_name || 'User'}</Text>
-        <Text style={styles.email}>{user.email}</Text>
-
-        <View style={styles.socialStats}>
-          <TouchableOpacity style={styles.socialStat}>
-            <Text style={styles.socialStatValue}>{socialStats.followersCount}</Text>
-            <Text style={styles.socialStatLabel}>Followers</Text>
-          </TouchableOpacity>
-          <View style={styles.socialStatSeparator} />
-          <TouchableOpacity style={styles.socialStat}>
-            <Text style={styles.socialStatValue}>{socialStats.friendsCount || 0}</Text>
-            <Text style={styles.socialStatLabel}>Friends</Text>
-          </TouchableOpacity>
-          <View style={styles.socialStatSeparator} />
-          <TouchableOpacity style={styles.socialStat}>
-            <Text style={styles.socialStatValue}>{socialStats.followingCount}</Text>
-            <Text style={styles.socialStatLabel}>Following</Text>
-          </TouchableOpacity>
-        </View>
       </View>
 
-      <View style={styles.statsRow}>
-        <Card style={styles.statCard} padding="md">
-          <Text style={styles.statValue}>{stats.totalEntries}</Text>
-          <Text style={styles.statLabel}>Entries</Text>
-        </Card>
-        <Card style={styles.statCard} padding="md">
-          <Text style={styles.statValue}>
-            {stats.averageMood > 0 ? stats.averageMood.toFixed(1) : '-'}
+      <View style={styles.socialRow}>
+        <SocialStat value={socialStats.followersCount} label="Followers" />
+        <View style={styles.socialDivider} />
+        <SocialStat value={socialStats.friendsCount || 0} label="Friends" />
+        <View style={styles.socialDivider} />
+        <SocialStat value={socialStats.followingCount} label="Following" />
+      </View>
+
+      <View style={styles.tiles}>
+        <StatTile label="Check-ins" value={String(stats.total)} hint={`in ${year}`} />
+        <StatTile
+          label="Average mood"
+          value={stats.avg > 0 ? stats.avg.toFixed(1) : '–'}
+          hint={stats.avg > 0 ? MOODS[toMoodLevel(stats.avg)].label : 'No entries yet'}
+          accent={stats.avg > 0 ? MOODS[toMoodLevel(stats.avg)].ink : undefined}
+        />
+        <StatTile label="Streak" value={`${stats.streak}d`} accent={stats.streak > 0 ? colors.brandStrong : undefined} />
+      </View>
+
+      <Pressable
+        onPress={() => router.push(`/summary/${year}`)}
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.recapCard, pressed && { opacity: 0.92 }]}
+      >
+        <LinearGradient
+          colors={['#FF8E48', '#F26A1B', '#B3430C']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.recapGradient}
+        >
+          <View style={styles.recapText}>
+            <Text style={styles.recapEyebrow}>Year in review</Text>
+            <Text style={styles.recapTitle}>Your {year} recap</Text>
+            <Text style={styles.recapSub}>
+              {stats.total > 0
+                ? `${stats.total} check-ins so far. See how it’s shaping up.`
+                : 'Starts filling in with your first check-in.'}
+            </Text>
+          </View>
+          <View style={styles.recapFace}>
+            <MoodFace mood={stats.avg > 0 ? toMoodLevel(stats.avg) : 4} size={56} />
+          </View>
+          <Ionicons name="arrow-forward" size={18} color={colors.inkOnBrand} style={styles.recapArrow} />
+        </LinearGradient>
+      </Pressable>
+
+      <SectionHeader
+        title={`${year} intentions`}
+        action={{ label: '+ Add', onPress: () => setGoalModalVisible(true) }}
+        style={styles.section}
+      />
+      {goals.length === 0 ? (
+        <View style={styles.goalsEmpty}>
+          <Text style={styles.goalsEmptyTitle}>Nothing set for {year} yet.</Text>
+          <Text style={styles.goalsEmptyText}>
+            Add one or two intentions. You can tag daily check-ins that move them forward.
           </Text>
-          <Text style={styles.statLabel}>Avg Mood</Text>
-        </Card>
-      </View>
+        </View>
+      ) : (
+        <View style={styles.goals}>
+          <Text style={styles.goalsProgress}>
+            {completedGoals} of {goals.length} done
+          </Text>
+          {goals.map((goal) => (
+            <GoalItem key={goal.id} goal={goal} onToggle={toggleCompletion} onDelete={handleDeleteGoal} />
+          ))}
+        </View>
+      )}
 
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{new Date().getFullYear()} Goals</Text>
-        <TouchableOpacity onPress={() => setGoalModalVisible(true)}>
-          <Text style={styles.addButton}>+ Add</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.goalsList}>
-        {goals.length === 0 ? (
-          <Text style={styles.emptyText}>No goals set for this year yet.</Text>
-        ) : (
-          goals.map(goal => (
-            <GoalItem
-              key={goal.id}
-              goal={goal}
-              onToggle={toggleCompletion}
-              onDelete={handleDeleteGoal}
-            />
-          ))
-        )}
-      </View>
-
-      <View style={styles.actions}>
-        <Button
-          title="See Yearly Summary"
-          variant="secondary"
-          onPress={() => router.push(`/summary/${new Date().getFullYear()}`)}
-          fullWidth
-          style={{ marginBottom: spacing.md }}
+      <SectionHeader title="Account" style={styles.section} />
+      <ListGroup>
+        <ListRow icon="mail-outline" title="Email" value={user.email} chevron={false} />
+        <ListRow
+          icon="calendar-outline"
+          title="Member since"
+          value={new Date(user.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+          chevron={false}
         />
-        <Button
-          title="Sign Out"
-          variant="ghost"
-          onPress={handleSignOut}
-          fullWidth
-          textStyle={{ color: colors.error }}
-        />
-      </View>
+        <ListRow icon="log-out-outline" iconTone="danger" title="Sign out" onPress={handleSignOut} chevron={false} destructive last />
+      </ListGroup>
+
+      <Text style={styles.version}>recap · v1.0</Text>
 
       <AddGoalModal
         visible={isGoalModalVisible}
         onClose={() => setGoalModalVisible(false)}
         onAdd={handleAddGoal}
       />
-    </ScrollView>
+    </Screen>
+  );
+}
+
+function SocialStat({ value, label }: { value: number; label: string }) {
+  return (
+    <View style={styles.socialStat}>
+      <Text style={styles.socialValue}>{value}</Text>
+      <Text style={styles.socialLabel}>{label}</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  identity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  identityText: {
     flex: 1,
-    backgroundColor: colors.background,
-  },
-  content: {
-    padding: spacing.lg,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: spacing.xl,
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: colors.primary[100],
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.md,
-  },
-  avatarText: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: colors.primary[600],
+    gap: 2,
   },
   name: {
-    fontSize: typography.sizes.xl,
-    fontWeight: typography.weights.bold,
-    color: colors.text.primary,
-    marginBottom: 4,
+    ...type.title1,
   },
   email: {
-    fontSize: typography.sizes.md,
-    color: colors.text.secondary,
-    marginBottom: spacing.md,
+    ...type.subhead,
   },
-  socialStats: {
+  socialRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.lg,
+    marginTop: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.s12,
   },
   socialStat: {
-    alignItems: 'center',
-  },
-  socialStatValue: {
-    fontSize: typography.sizes.lg,
-    fontWeight: 'bold',
-    color: colors.text.primary,
-  },
-  socialStatLabel: {
-    fontSize: typography.sizes.xs,
-    color: colors.text.secondary,
-  },
-  socialStatSeparator: {
-    width: 1,
-    height: 24,
-    backgroundColor: colors.gray[200],
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginBottom: spacing.xl,
-  },
-  statCard: {
     flex: 1,
     alignItems: 'center',
+    gap: 2,
   },
-  statValue: {
-    fontSize: typography.sizes.xl,
-    fontWeight: typography.weights.bold,
-    color: colors.primary[600],
-    marginBottom: 4,
+  socialValue: {
+    fontFamily: fonts.display,
+    fontSize: 22,
+    lineHeight: 26,
+    color: colors.ink,
   },
-  statLabel: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.secondary,
+  socialLabel: {
+    ...type.caption,
   },
-  sectionHeader: {
+  socialDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 28,
+    backgroundColor: colors.border,
+  },
+  tiles: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  sectionTitle: {
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.bold,
-    color: colors.text.primary,
-  },
-  addButton: {
-    color: colors.primary[600],
-    fontWeight: '600',
-    fontSize: typography.sizes.md,
-  },
-  goalsList: {
-    marginBottom: spacing.xl,
-  },
-  emptyText: {
-    textAlign: 'center',
-    color: colors.text.muted,
-    fontStyle: 'italic',
+    gap: spacing.sm,
     marginTop: spacing.sm,
   },
-  actions: {
+  recapCard: {
     marginTop: spacing.lg,
+    borderRadius: radius.xl,
+    borderCurve: 'continuous',
+    overflow: 'hidden',
+    ...shadows.brand,
+  },
+  recapGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.s20,
+    gap: spacing.md,
+  },
+  recapText: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  recapEyebrow: {
+    ...type.label,
+    color: '#FFE8D6',
+  },
+  recapTitle: {
+    fontFamily: fonts.displayBold,
+    fontSize: 24,
+    lineHeight: 28,
+    letterSpacing: -0.5,
+    color: colors.inkOnBrand,
+  },
+  recapSub: {
+    ...type.footnote,
+    color: '#FFE8D6',
+  },
+  recapFace: {
+    width: 68,
+    height: 68,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recapArrow: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
+    opacity: 0.8,
+  },
+  section: {
+    marginTop: spacing.xl,
+  },
+  goals: {
+    gap: spacing.sm,
+  },
+  goalsProgress: {
+    ...type.caption,
+    marginBottom: spacing.xs,
+  },
+  goalsEmpty: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.lg,
+    borderCurve: 'continuous',
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
+  goalsEmptyTitle: {
+    ...type.headline,
+  },
+  goalsEmptyText: {
+    ...type.footnote,
+  },
+  version: {
+    ...type.caption,
+    textAlign: 'center',
+    marginTop: spacing.xl,
   },
 });

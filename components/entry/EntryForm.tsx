@@ -1,12 +1,13 @@
 import { MoodPicker } from '@/components/mood';
-import { Button, Card, TextArea } from '@/components/ui';
-import { MoodLevel, toMoodLevel } from '@/constants/moods';
-import { borderRadius, colors, spacing, typography } from '@/constants/theme';
+import { Button, Chip, Segmented, TextArea } from '@/components/ui';
+import { MOODS, MoodLevel, toMoodLevel } from '@/constants/moods';
+import { colors, fonts, radius, spacing, type } from '@/constants/theme';
 import * as api from '@/lib/api/goals';
 import { useAuthStore, useEntriesStore, useGoalsStore } from '@/stores';
 import { Visibility } from '@/types';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { format, parseISO } from 'date-fns';
+import { format, isToday as isTodayDate, parseISO } from 'date-fns';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
@@ -15,13 +16,16 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface EntryFormProps {
   date?: string; // ISO date string, defaults to today
   onSuccess?: () => void;
+  /** Rendered above the form inside the same scroll view (Today screen header). */
+  header?: React.ReactNode;
 }
 
 interface EntryDraft {
@@ -33,16 +37,24 @@ interface EntryDraft {
 }
 
 function areGoalIdsEqual(left: string[], right: string[]) {
-  return left.length === right.length && left.every(id => right.includes(id));
+  return left.length === right.length && left.every((id) => right.includes(id));
 }
 
 function isVisibility(value: unknown): value is Visibility {
   return value === 'private' || value === 'friends' || value === 'public';
 }
 
-export function EntryForm({ date, onSuccess }: EntryFormProps) {
+const VISIBILITY_OPTIONS: { value: Visibility; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { value: 'private', label: 'Private', icon: 'lock-closed' },
+  { value: 'friends', label: 'Friends', icon: 'people' },
+  { value: 'public', label: 'Public', icon: 'globe-outline' },
+];
+
+export function EntryForm({ date, onSuccess, header }: EntryFormProps) {
+  const insets = useSafeAreaInsets();
   const entryDate = date || format(new Date(), 'yyyy-MM-dd');
-  const entryYear = parseISO(entryDate).getFullYear();
+  const parsedDate = parseISO(entryDate);
+  const entryYear = parsedDate.getFullYear();
   const draftStorageKey = `entry-draft:${entryDate}`;
   const { todayEntry, createOrUpdateEntry, isLoading, fetchTodayEntry, getEntryByDate } = useEntriesStore();
   const { user } = useAuthStore();
@@ -55,11 +67,10 @@ export function EntryForm({ date, onSuccess }: EntryFormProps) {
   const [hasChanges, setHasChanges] = useState(false);
   const [isDraftLoaded, setIsDraftLoaded] = useState(false);
   const [draftStatus, setDraftStatus] = useState<'idle' | 'saved' | 'restored'>('idle');
-
-  // Track initial state to detect changes
+  const [justSaved, setJustSaved] = useState(false);
   const [initialGoalIds, setInitialGoalIds] = useState<string[]>([]);
 
-  const isToday = entryDate === format(new Date(), 'yyyy-MM-dd');
+  const isToday = isTodayDate(parsedDate);
   const existingEntry = isToday ? todayEntry : getEntryByDate(entryDate) || null;
 
   useEffect(() => {
@@ -75,11 +86,13 @@ export function EntryForm({ date, onSuccess }: EntryFormProps) {
       setNote(existingEntry.note || '');
       setVisibility(existingEntry.visibility || 'private');
 
-      // Fetch linked goals for this entry
-      api.getGoalsForEntry(existingEntry.id).then(ids => {
-        setSelectedGoalIds(ids);
-        setInitialGoalIds(ids);
-      }).catch(err => console.error('Failed to fetch entry goals', err));
+      api
+        .getGoalsForEntry(existingEntry.id)
+        .then((ids) => {
+          setSelectedGoalIds(ids);
+          setInitialGoalIds(ids);
+        })
+        .catch((err) => console.error('Failed to fetch entry goals', err));
     } else {
       setSelectedMood(null);
       setNote('');
@@ -101,15 +114,9 @@ export function EntryForm({ date, onSuccess }: EntryFormProps) {
 
         const draft = JSON.parse(rawDraft) as Partial<EntryDraft>;
 
-        if (typeof draft.mood === 'number') {
-          setSelectedMood(toMoodLevel(draft.mood));
-        }
-        if (typeof draft.note === 'string') {
-          setNote(draft.note);
-        }
-        if (isVisibility(draft.visibility)) {
-          setVisibility(draft.visibility);
-        }
+        if (typeof draft.mood === 'number') setSelectedMood(toMoodLevel(draft.mood));
+        if (typeof draft.note === 'string') setNote(draft.note);
+        if (isVisibility(draft.visibility)) setVisibility(draft.visibility);
         if (Array.isArray(draft.selectedGoalIds)) {
           setSelectedGoalIds(draft.selectedGoalIds.filter((id): id is string => typeof id === 'string'));
         }
@@ -120,9 +127,7 @@ export function EntryForm({ date, onSuccess }: EntryFormProps) {
         console.error('Failed to restore entry draft', error);
       })
       .finally(() => {
-        if (isMounted) {
-          setIsDraftLoaded(true);
-        }
+        if (isMounted) setIsDraftLoaded(true);
       });
 
     return () => {
@@ -135,10 +140,7 @@ export function EntryForm({ date, onSuccess }: EntryFormProps) {
       const moodChanged = selectedMood !== existingEntry.mood;
       const noteChanged = note !== (existingEntry.note || '');
       const visibilityChanged = visibility !== (existingEntry.visibility || 'private');
-
-      // Check if goals changed
       const goalsChanged = !areGoalIdsEqual(selectedGoalIds, initialGoalIds);
-
       setHasChanges(moodChanged || noteChanged || goalsChanged || visibilityChanged);
     } else {
       setHasChanges(selectedMood !== null);
@@ -187,34 +189,21 @@ export function EntryForm({ date, onSuccess }: EntryFormProps) {
     }, 350);
 
     return () => clearTimeout(timeoutId);
-  }, [
-    draftStorageKey,
-    existingEntry,
-    initialGoalIds,
-    isDraftLoaded,
-    note,
-    selectedGoalIds,
-    selectedMood,
-    visibility,
-  ]);
+  }, [draftStorageKey, existingEntry, initialGoalIds, isDraftLoaded, note, selectedGoalIds, selectedMood, visibility]);
 
   const toggleGoal = (goalId: string) => {
-    setSelectedGoalIds(prev => {
-      if (prev.includes(goalId)) {
-        return prev.filter(id => id !== goalId);
-      }
-      return [...prev, goalId];
-    });
+    setSelectedGoalIds((prev) =>
+      prev.includes(goalId) ? prev.filter((id) => id !== goalId) : [...prev, goalId]
+    );
   };
 
   const handleSave = async () => {
     if (!selectedMood) {
-      Alert.alert('Select a mood', 'Please select how you\'re feeling today');
+      Alert.alert('Pick a mood', 'Choose how the day felt before saving.');
       return;
     }
-
     if (!user?.id) {
-      Alert.alert('Error', 'You must be logged in to save an entry');
+      Alert.alert('Not signed in', 'Sign in again to save your entry.');
       return;
     }
 
@@ -227,135 +216,124 @@ export function EntryForm({ date, onSuccess }: EntryFormProps) {
         visibility,
       });
 
-      // Update linked goals
       if (entry) {
-        // Find added goals
-        const addedGoals = selectedGoalIds.filter(id => !initialGoalIds.includes(id));
-        // Find removed goals
-        const removedGoals = initialGoalIds.filter(id => !selectedGoalIds.includes(id));
+        const addedGoals = selectedGoalIds.filter((id) => !initialGoalIds.includes(id));
+        const removedGoals = initialGoalIds.filter((id) => !selectedGoalIds.includes(id));
 
         await Promise.all([
-          ...addedGoals.map(id => api.linkGoalToEntry(entry.id, id)),
-          ...removedGoals.map(id => api.unlinkGoalFromEntry(entry.id, id))
+          ...addedGoals.map((id) => api.linkGoalToEntry(entry.id, id)),
+          ...removedGoals.map((id) => api.unlinkGoalFromEntry(entry.id, id)),
         ]);
 
-        // Update initial state
         setInitialGoalIds(selectedGoalIds);
       }
 
       await AsyncStorage.removeItem(draftStorageKey);
       setDraftStatus('idle');
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 2500);
       onSuccess?.();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to save entry');
+      Alert.alert('Could not save', error.message || 'Please try again.');
     }
   };
 
-  const formattedDate = format(parseISO(entryDate), 'EEEE, MMMM d');
+  const pendingGoals = goals.filter((g) => !g.is_completed);
+  const moodInfo = selectedMood ? MOODS[selectedMood] : null;
+  const question = isToday ? 'How was your day?' : `How was ${format(parsedDate, 'EEEE, MMM d')}?`;
+  const notePlaceholder = moodInfo
+    ? `What made it ${moodInfo.word}?`
+    : 'Anything worth remembering?';
 
-  const pendingGoals = goals.filter(g => !g.is_completed);
-  const visibilityOptions: { value: Visibility; label: string }[] = [
-    { value: 'private', label: 'Private' },
-    { value: 'friends', label: 'Friends' },
-    { value: 'public', label: 'Public' },
-  ];
+  const statusText = justSaved
+    ? 'Saved'
+    : existingEntry && !hasChanges
+      ? `Logged at ${format(new Date(existingEntry.updated_at), 'h:mm a')}`
+      : draftStatus === 'restored'
+        ? 'Draft restored'
+        : draftStatus === 'saved'
+          ? 'Draft saved on this device'
+          : null;
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.container}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + spacing.xl }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.date}>{formattedDate}</Text>
+        {header}
 
-        <Card style={styles.moodCard} variant="elevated" padding="lg">
-          <MoodPicker
-            selectedMood={selectedMood}
-            onSelect={setSelectedMood}
-            size="lg"
-          />
-        </Card>
-
-        {pendingGoals.length > 0 && (
-          <Card style={styles.goalsCard} variant="outlined" padding="md">
-            <Text style={styles.sectionTitle}>Working towards any goals today?</Text>
-            <View style={styles.goalsContainer}>
-              {pendingGoals.map(goal => {
-                const isSelected = selectedGoalIds.includes(goal.id);
-                return (
-                  <TouchableOpacity
-                    key={goal.id}
-                    style={[styles.goalChip, isSelected && styles.goalChipSelected]}
-                    onPress={() => toggleGoal(goal.id)}
-                  >
-                    <Text style={[styles.goalText, isSelected && styles.goalTextSelected]}>
-                      {goal.title}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </Card>
-        )}
-
-        <Card style={styles.noteCard} variant="outlined" padding="md">
-          <TextArea
-            label="Add a note (optional)"
-            placeholder="What's on your mind today?"
-            value={note}
-            onChangeText={setNote}
-            maxLength={500}
-            containerStyle={{ marginBottom: 0 }}
-          />
-
-          <View style={styles.visibilityContainer}>
-            <Text style={styles.visibilityLabel}>Visibility:</Text>
-            <View style={styles.visibilityOptions}>
-              {visibilityOptions.map(({ value, label }) => (
-                <TouchableOpacity
-                  key={value}
-                  style={[
-                    styles.visibilityOption,
-                    visibility === value && styles.visibilityOptionSelected
-                  ]}
-                  onPress={() => setVisibility(value)}
-                >
-                  <Text style={[
-                    styles.visibilityText,
-                    visibility === value && styles.visibilityTextSelected
-                  ]}>
-                    {label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+        <Animated.View layout={LinearTransition.duration(250)} style={styles.moodCard}>
+          <View style={styles.moodCardHeader}>
+            <Text style={styles.question}>{question}</Text>
+            {moodInfo && (
+              <Animated.View entering={FadeIn.duration(200)} style={[styles.moodTag, { backgroundColor: moodInfo.tint }]}>
+                <Text style={[styles.moodTagText, { color: moodInfo.ink }]}>{moodInfo.label}</Text>
+              </Animated.View>
+            )}
           </View>
-        </Card>
+          <MoodPicker selectedMood={selectedMood} onSelect={setSelectedMood} size="lg" />
+        </Animated.View>
 
-        <Button
-          title={existingEntry ? 'Update Entry' : 'Save Entry'}
-          onPress={handleSave}
-          disabled={!hasChanges || !selectedMood}
-          loading={isLoading}
-          fullWidth
-          size="lg"
-        />
+        {selectedMood && (
+          <Animated.View entering={FadeInDown.duration(300)} layout={LinearTransition.duration(250)} style={styles.details}>
+            <View style={styles.noteCard}>
+              <TextArea
+                placeholder={notePlaceholder}
+                value={note}
+                onChangeText={setNote}
+                maxLength={500}
+                bare
+                style={styles.noteInput}
+              />
+            </View>
 
-        {draftStatus !== 'idle' && (
-          <Text style={styles.draftIndicator}>
-            {draftStatus === 'restored' ? 'Draft restored' : 'Draft saved locally'}
-          </Text>
+            {pendingGoals.length > 0 && (
+              <View style={styles.block}>
+                <Text style={styles.blockLabel}>Moved forward on</Text>
+                <View style={styles.chips}>
+                  {pendingGoals.map((goal) => (
+                    <Chip
+                      key={goal.id}
+                      label={goal.title}
+                      selected={selectedGoalIds.includes(goal.id)}
+                      onPress={() => toggleGoal(goal.id)}
+                      icon={selectedGoalIds.includes(goal.id) ? 'checkmark' : undefined}
+                    />
+                  ))}
+                </View>
+              </View>
+            )}
+
+            <View style={styles.block}>
+              <Text style={styles.blockLabel}>Who can see this</Text>
+              <Segmented options={VISIBILITY_OPTIONS} value={visibility} onChange={setVisibility} />
+            </View>
+          </Animated.View>
         )}
 
-        {existingEntry && (
-          <Text style={styles.savedIndicator}>
-            ✓ Entry saved at {format(new Date(existingEntry.updated_at), 'h:mm a')}
-          </Text>
-        )}
+        <Animated.View layout={LinearTransition.duration(250)} style={styles.actions}>
+          <Button
+            title={existingEntry ? 'Update entry' : isToday ? 'Save today' : 'Save entry'}
+            onPress={handleSave}
+            disabled={!hasChanges || !selectedMood}
+            loading={isLoading}
+            fullWidth
+            size="lg"
+            icon={justSaved ? 'checkmark' : undefined}
+          />
+          {statusText && (
+            <View style={styles.status}>
+              {justSaved && <Ionicons name="checkmark-circle" size={14} color={colors.success} />}
+              <Text style={[styles.statusText, justSaved && { color: colors.success }]}>{statusText}</Text>
+            </View>
+          )}
+        </Animated.View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -366,101 +344,81 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxl,
-  },
-  date: {
-    fontSize: typography.sizes.xl,
-    fontWeight: typography.weights.bold,
-    color: colors.text.primary,
-    textAlign: 'center',
-    marginBottom: spacing.lg,
+    paddingHorizontal: spacing.screen,
+    gap: spacing.md,
   },
   moodCard: {
-    marginBottom: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderCurve: 'continuous',
+    paddingTop: spacing.s20,
+    paddingBottom: spacing.s12,
+    paddingHorizontal: spacing.md,
+    gap: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  goalsCard: {
-    marginBottom: spacing.lg,
+  moodCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
   },
-  sectionTitle: {
-    fontSize: typography.sizes.sm,
-    fontWeight: '600',
-    color: colors.text.secondary,
-    marginBottom: spacing.sm,
+  question: {
+    ...type.title2,
+    flex: 1,
   },
-  goalsContainer: {
+  moodTag: {
+    paddingHorizontal: spacing.s12,
+    paddingVertical: spacing.xs + 1,
+    borderRadius: radius.full,
+  },
+  moodTagText: {
+    fontFamily: fonts.sansSemibold,
+    fontSize: 13,
+  },
+  details: {
+    gap: spacing.md,
+  },
+  noteCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderCurve: 'continuous',
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.s12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  noteInput: {
+    fontFamily: fonts.displayItalic,
+    fontSize: 18,
+    lineHeight: 27,
+    minHeight: 96,
+  },
+  block: {
+    gap: spacing.sm,
+  },
+  blockLabel: {
+    ...type.label,
+  },
+  chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  goalChip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.gray[100],
-    borderWidth: 1,
-    borderColor: colors.gray[200],
+  actions: {
+    gap: spacing.s12,
+    marginTop: spacing.xs,
   },
-  goalChipSelected: {
-    backgroundColor: colors.primary[100],
-    borderColor: colors.primary[300],
-  },
-  goalText: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.secondary,
-  },
-  goalTextSelected: {
-    color: colors.primary[700],
-    fontWeight: '500',
-  },
-  noteCard: {
-    marginBottom: spacing.lg,
-  },
-  visibilityContainer: {
-    marginTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.gray[100],
-    paddingTop: spacing.md,
-  },
-  visibilityLabel: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.secondary,
-    marginBottom: spacing.sm,
-  },
-  visibilityOptions: {
+  status: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
   },
-  visibilityOption: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.gray[50],
-    borderWidth: 1,
-    borderColor: colors.gray[200],
-  },
-  visibilityOptionSelected: {
-    backgroundColor: colors.primary[50],
-    borderColor: colors.primary[300],
-  },
-  visibilityText: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.secondary,
-  },
-  visibilityTextSelected: {
-    color: colors.primary[700],
-    fontWeight: '500',
-  },
-  savedIndicator: {
-    fontSize: typography.sizes.sm,
-    color: colors.success,
-    textAlign: 'center',
-    marginTop: spacing.md,
-  },
-  draftIndicator: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.muted,
-    textAlign: 'center',
-    marginTop: spacing.sm,
+  statusText: {
+    ...type.footnote,
+    color: colors.inkMuted,
   },
 });

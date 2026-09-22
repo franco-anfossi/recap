@@ -1,26 +1,51 @@
-import { borderRadius, colors, spacing, typography } from '@/constants/theme';
+import { colors, radius, shadows, spacing, type } from '@/constants/theme';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import React from 'react';
 import {
   ActivityIndicator,
+  Pressable,
+  StyleProp,
   StyleSheet,
   Text,
   TextStyle,
-  TouchableOpacity,
+  View,
   ViewStyle,
 } from 'react-native';
+
+type Variant = 'primary' | 'secondary' | 'ghost' | 'soft' | 'danger';
+type Size = 'sm' | 'md' | 'lg';
 
 interface ButtonProps {
   title: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'ghost';
-  size?: 'sm' | 'md' | 'lg';
+  variant?: Variant;
+  size?: Size;
   disabled?: boolean;
   loading?: boolean;
   fullWidth?: boolean;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  icon?: keyof typeof Ionicons.glyphMap;
+  iconPosition?: 'left' | 'right';
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
 }
+
+const variantStyles: Record<Variant, { container: ViewStyle; text: string }> = {
+  primary: { container: { backgroundColor: colors.brand }, text: colors.inkOnBrand },
+  secondary: {
+    container: { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.border },
+    text: colors.ink,
+  },
+  soft: { container: { backgroundColor: colors.brandTint }, text: colors.brandStrong },
+  ghost: { container: { backgroundColor: 'transparent' }, text: colors.brandStrong },
+  danger: { container: { backgroundColor: colors.dangerSoft }, text: colors.danger },
+};
+
+const sizeStyles: Record<Size, { container: ViewStyle; fontSize: number; icon: number }> = {
+  sm: { container: { minHeight: 38, paddingHorizontal: spacing.md }, fontSize: 14, icon: 16 },
+  md: { container: { minHeight: 48, paddingHorizontal: spacing.lg }, fontSize: 16, icon: 18 },
+  lg: { container: { minHeight: 56, paddingHorizontal: spacing.xl }, fontSize: 17, icon: 20 },
+};
 
 export function Button({
   title,
@@ -30,46 +55,56 @@ export function Button({
   disabled = false,
   loading = false,
   fullWidth = false,
+  icon,
+  iconPosition = 'left',
   style,
   textStyle,
 }: ButtonProps) {
-  const handlePress = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  const handlePress = () => {
+    if (process.env.EXPO_OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
     onPress();
   };
 
-  const buttonStyles = [
-    styles.base,
-    styles[variant],
-    styles[`size_${size}`],
-    fullWidth && styles.fullWidth,
-    disabled && styles.disabled,
-    style,
-  ];
+  const v = variantStyles[variant];
+  const s = sizeStyles[size];
+  const isInactive = disabled || loading;
 
-  const textStyles = [
-    styles.text,
-    styles[`text_${variant}`],
-    styles[`text_${size}`],
-    textStyle,
-  ];
+  const iconNode = icon ? (
+    <Ionicons name={icon} size={s.icon} color={v.text} />
+  ) : null;
 
   return (
-    <TouchableOpacity
-      style={buttonStyles}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: isInactive, busy: loading }}
+      disabled={isInactive}
       onPress={handlePress}
-      disabled={disabled || loading}
-      activeOpacity={0.8}
+      style={({ pressed }) => [
+        styles.base,
+        v.container,
+        s.container,
+        variant === 'primary' && !isInactive && shadows.brand,
+        fullWidth && styles.fullWidth,
+        disabled && styles.disabled,
+        pressed && styles.pressed,
+        style,
+      ]}
     >
       {loading ? (
-        <ActivityIndicator
-          color={variant === 'primary' ? colors.surface : colors.primary[500]}
-          size="small"
-        />
+        <ActivityIndicator color={v.text} size="small" />
       ) : (
-        <Text style={textStyles}>{title}</Text>
+        <View style={styles.row}>
+          {iconPosition === 'left' && iconNode}
+          <Text style={[type.button, { color: v.text, fontSize: s.fontSize }, textStyle]}>
+            {title}
+          </Text>
+          {iconPosition === 'right' && iconNode}
+        </View>
       )}
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -77,59 +112,22 @@ const styles = StyleSheet.create({
   base: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: borderRadius.md,
+    borderRadius: radius.full,
+    borderCurve: 'continuous',
   },
-  primary: {
-    backgroundColor: colors.primary[500],
-  },
-  secondary: {
-    backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.gray[200],
-  },
-  ghost: {
-    backgroundColor: 'transparent',
-  },
-  size_sm: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    minHeight: 36,
-  },
-  size_md: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    minHeight: 44,
-  },
-  size_lg: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xl,
-    minHeight: 52,
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   fullWidth: {
     width: '100%',
   },
   disabled: {
-    opacity: 0.5,
+    opacity: 0.45,
   },
-  text: {
-    fontWeight: typography.weights.semibold,
-  },
-  text_primary: {
-    color: colors.surface,
-  },
-  text_secondary: {
-    color: colors.text.primary,
-  },
-  text_ghost: {
-    color: colors.primary[500],
-  },
-  text_sm: {
-    fontSize: typography.sizes.sm,
-  },
-  text_md: {
-    fontSize: typography.sizes.md,
-  },
-  text_lg: {
-    fontSize: typography.sizes.lg,
+  pressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.985 }],
   },
 });

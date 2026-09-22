@@ -1,61 +1,103 @@
-import { MOODS, MoodLevel } from '@/constants/moods';
-import { borderRadius, colors, shadows, spacing, typography } from '@/constants/theme';
+import { MOODS, MOOD_LEVELS, MoodLevel } from '@/constants/moods';
+import { colors, fonts, motion, spacing, type } from '@/constants/theme';
 import * as Haptics from 'expo-haptics';
-import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import { MoodFace } from './MoodFace';
 
 interface MoodPickerProps {
   selectedMood: MoodLevel | null;
   onSelect: (mood: MoodLevel) => void;
   size?: 'sm' | 'md' | 'lg';
+  showLabels?: boolean;
 }
 
-export function MoodPicker({ selectedMood, onSelect, size = 'lg' }: MoodPickerProps) {
-  const handleSelect = async (mood: MoodLevel) => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+const FACE_SIZES = { sm: 40, md: 48, lg: 56 } as const;
+
+export function MoodPicker({ selectedMood, onSelect, size = 'lg', showLabels = true }: MoodPickerProps) {
+  const handleSelect = (mood: MoodLevel) => {
+    if (process.env.EXPO_OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
     onSelect(mood);
   };
 
-  const moodKeys = Object.keys(MOODS).map(Number) as MoodLevel[];
+  return (
+    <View style={styles.row}>
+      {MOOD_LEVELS.map((level) => (
+        <MoodOption
+          key={level}
+          level={level}
+          faceSize={FACE_SIZES[size]}
+          selected={selectedMood === level}
+          dimmed={selectedMood !== null && selectedMood !== level}
+          showLabel={showLabels}
+          onPress={() => handleSelect(level)}
+        />
+      ))}
+    </View>
+  );
+}
+
+interface MoodOptionProps {
+  level: MoodLevel;
+  faceSize: number;
+  selected: boolean;
+  dimmed: boolean;
+  showLabel: boolean;
+  onPress: () => void;
+}
+
+function MoodOption({ level, faceSize, selected, dimmed, showLabel, onPress }: MoodOptionProps) {
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(1);
+  const info = MOODS[level];
+
+  useEffect(() => {
+    scale.value = withSpring(selected ? 1.18 : 1, { damping: 12, stiffness: 180 });
+    opacity.value = withTiming(dimmed ? 0.45 : 1, { duration: motion.base });
+  }, [selected, dimmed, scale, opacity]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
+  }));
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>How are you feeling today?</Text>
-      <View style={styles.moodRow}>
-        {moodKeys.map((level) => {
-          const mood = MOODS[level];
-          const isSelected = selectedMood === level;
-
-          return (
-            <TouchableOpacity
-              key={level}
-              style={[
-                styles.moodButton,
-                styles[`size_${size}`],
-                isSelected && styles.selected,
-                isSelected && { borderColor: mood.color },
-              ]}
-              onPress={() => handleSelect(level)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.emoji, styles[`emoji_${size}`]]}>
-                {mood.emoji}
-              </Text>
-              {size !== 'sm' && (
-                <Text
-                  style={[
-                    styles.label,
-                    isSelected && { color: mood.color },
-                  ]}
-                >
-                  {mood.label}
-                </Text>
-              )}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </View>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${info.label} mood`}
+      accessibilityState={{ selected }}
+      onPressIn={() => {
+        scale.value = withSpring(selected ? 1.1 : 0.92, { damping: 14 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(selected ? 1.18 : 1, { damping: 12, stiffness: 180 });
+      }}
+      style={styles.option}
+    >
+      <Animated.View style={[styles.face, animatedStyle]}>
+        <MoodFace mood={level} size={faceSize} />
+      </Animated.View>
+      {showLabel && (
+        <Text
+          style={[
+            styles.label,
+            selected && { color: info.ink, fontFamily: fonts.sansSemibold },
+            dimmed && styles.labelDimmed,
+          ]}
+        >
+          {info.label}
+        </Text>
+      )}
+    </Pressable>
   );
 }
 
@@ -67,95 +109,47 @@ interface MoodIconProps {
 
 export function MoodIcon({ mood, size = 'md', showLabel = false }: MoodIconProps) {
   const moodInfo = MOODS[mood];
-
-  const emojiSizes = {
-    sm: 16,
-    md: 24,
-    lg: 32,
-  };
+  const px = { sm: 20, md: 28, lg: 40 }[size];
 
   return (
     <View style={styles.iconContainer}>
-      <Text style={{ fontSize: emojiSizes[size] }}>{moodInfo.emoji}</Text>
+      <MoodFace mood={mood} size={px} />
       {showLabel && (
-        <Text style={[styles.iconLabel, { color: moodInfo.color }]}>
-          {moodInfo.label}
-        </Text>
+        <Text style={[styles.iconLabel, { color: moodInfo.ink }]}>{moodInfo.label}</Text>
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: typography.sizes.xl,
-    fontWeight: typography.weights.semibold,
-    color: colors.text.primary,
-    marginBottom: spacing.lg,
-    textAlign: 'center',
-  },
-  moodRow: {
+  row: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.sm,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
-  moodButton: {
+  option: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    flex: 1,
+    paddingVertical: spacing.sm,
+  },
+  face: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    borderWidth: 2,
-    borderColor: colors.gray[200],
-    ...shadows.sm,
-  },
-  size_sm: {
-    width: 48,
-    height: 48,
-    padding: spacing.xs,
-  },
-  size_md: {
-    width: 60,
-    height: 72,
-    padding: spacing.sm,
-  },
-  size_lg: {
-    width: 64,
-    height: 84,
-    padding: spacing.sm,
-  },
-  selected: {
-    borderWidth: 3,
-    backgroundColor: colors.gray[50],
-    transform: [{ scale: 1.05 }],
-  },
-  emoji: {
-    textAlign: 'center',
-  },
-  emoji_sm: {
-    fontSize: 24,
-  },
-  emoji_md: {
-    fontSize: 28,
-  },
-  emoji_lg: {
-    fontSize: 32,
   },
   label: {
-    fontSize: typography.sizes.xs,
-    fontWeight: typography.weights.medium,
-    color: colors.text.secondary,
-    marginTop: spacing.xs,
+    ...type.caption,
+    color: colors.inkSecondary,
+  },
+  labelDimmed: {
+    color: colors.inkMuted,
   },
   iconContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   iconLabel: {
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.medium,
+    ...type.callout,
   },
 });

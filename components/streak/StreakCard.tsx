@@ -1,6 +1,25 @@
-import { borderRadius, colors, spacing, typography } from '@/constants/theme';
+import { colors, fonts, radius, spacing, type } from '@/constants/theme';
+import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+
+interface StreakPillProps {
+  streak: number;
+}
+
+/** Compact streak indicator for headers. */
+export function StreakPill({ streak }: StreakPillProps) {
+  const active = streak > 0;
+  return (
+    <View
+      style={[styles.pill, !active && styles.pillInactive]}
+      accessibilityLabel={`${streak} day streak`}
+    >
+      <Ionicons name="flame" size={16} color={active ? colors.brand : colors.inkMuted} />
+      <Text style={[styles.pillNumber, !active && styles.pillNumberInactive]}>{streak}</Text>
+    </View>
+  );
+}
 
 interface StreakCardProps {
   streak: number;
@@ -8,140 +27,112 @@ interface StreakCardProps {
 }
 
 export function StreakCard({ streak, compact = false }: StreakCardProps) {
+  if (compact) return <StreakPill streak={streak} />;
+
   const isActive = streak > 0;
-
-  const getMessage = () => {
-    if (streak === 0) return "Start your streak today!";
-    if (streak === 1) return "Great start! Keep it going!";
-    if (streak < 7) return "You're building momentum!";
-    if (streak < 30) return "Impressive dedication!";
-    if (streak < 100) return "You're on fire!";
-    return "Legendary streak!";
-  };
-
-  if (compact) {
-    return (
-      <View style={styles.compactContainer}>
-        <Text style={styles.compactEmoji}>🔥</Text>
-        <Text style={[
-          styles.compactNumber,
-          !isActive && styles.inactiveText
-        ]}>
-          {streak}
-        </Text>
-      </View>
-    );
-  }
+  const message = getMessage(streak);
+  const weekProgress = Math.min(streak, 7);
 
   return (
-    <View style={[styles.container, !isActive && styles.containerInactive]}>
-      <View style={styles.content}>
-        <View style={styles.streakDisplay}>
-          <Text style={styles.fireEmoji}>🔥</Text>
-          <Text style={[styles.streakNumber, !isActive && styles.inactiveText]}>
-            {streak}
-          </Text>
+    <View style={[styles.card, !isActive && styles.cardInactive]}>
+      <View style={styles.cardRow}>
+        <View style={[styles.flame, !isActive && styles.flameInactive]}>
+          <Ionicons name="flame" size={22} color={isActive ? colors.inkOnBrand : colors.inkMuted} />
         </View>
-
-        <View style={styles.info}>
-          <Text style={styles.label}>Day Streak</Text>
-          <Text style={styles.message}>{getMessage()}</Text>
+        <View style={styles.cardText}>
+          <Text style={styles.cardTitle}>
+            {streak} day{streak === 1 ? '' : 's'} in a row
+          </Text>
+          <Text style={styles.cardMessage}>{message}</Text>
         </View>
       </View>
-
-      {isActive && (
-        <View style={styles.progressBar}>
-          {[...Array(7)].map((_, i) => (
-            <View
-              key={i}
-              style={[
-                styles.progressDot,
-                i < Math.min(streak, 7) && styles.progressDotFilled,
-              ]}
-            />
-          ))}
-        </View>
-      )}
+      <View style={styles.track}>
+        {[...Array(7)].map((_, i) => (
+          <View key={i} style={[styles.segment, i < weekProgress && styles.segmentFilled]} />
+        ))}
+      </View>
     </View>
   );
 }
 
+function getMessage(streak: number) {
+  if (streak === 0) return 'Log today to start a streak.';
+  if (streak === 1) return 'Great start. Come back tomorrow.';
+  if (streak < 7) return "You're building a habit.";
+  if (streak < 30) return 'A full week and counting.';
+  if (streak < 100) return "You're on fire.";
+  return 'Legendary consistency.';
+}
+
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: colors.primary[50],
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    borderWidth: 2,
-    borderColor: colors.primary[200],
-  },
-  containerInactive: {
-    backgroundColor: colors.gray[100],
-    borderColor: colors.gray[200],
-  },
-  content: {
+  pill: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.brandTint,
+    paddingHorizontal: spacing.s12,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
   },
-  streakDisplay: {
+  pillInactive: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  pillNumber: {
+    fontFamily: fonts.sansBold,
+    fontSize: 15,
+    lineHeight: 18,
+    color: colors.brandStrong,
+  },
+  pillNumberInactive: {
+    color: colors.inkMuted,
+  },
+  card: {
+    backgroundColor: colors.brandTint,
+    borderRadius: radius.lg,
+    borderCurve: 'continuous',
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  cardInactive: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  cardRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: spacing.md,
+    gap: spacing.s12,
   },
-  fireEmoji: {
-    fontSize: 36,
+  flame: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.full,
+    backgroundColor: colors.brand,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  streakNumber: {
-    fontSize: 42,
-    fontWeight: '800',
-    color: colors.primary[600],
-    marginLeft: spacing.xs,
+  flameInactive: {
+    backgroundColor: colors.surfaceSunken,
   },
-  inactiveText: {
-    color: colors.gray[400],
-  },
-  info: {
+  cardText: {
     flex: 1,
+    gap: 2,
   },
-  label: {
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.bold,
-    color: colors.text.primary,
+  cardTitle: {
+    ...type.title3,
   },
-  message: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.secondary,
-    marginTop: 2,
+  cardMessage: {
+    ...type.footnote,
   },
-  progressBar: {
+  track: {
     flexDirection: 'row',
-    marginTop: spacing.md,
     gap: spacing.xs,
   },
-  progressDot: {
+  segment: {
     flex: 1,
     height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.primary[200],
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(27, 23, 20, 0.08)',
   },
-  progressDotFilled: {
-    backgroundColor: colors.primary[500],
-  },
-  // Compact styles for header
-  compactContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary[50],
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.full,
-  },
-  compactEmoji: {
-    fontSize: 16,
-  },
-  compactNumber: {
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.bold,
-    color: colors.primary[600],
-    marginLeft: 4,
+  segmentFilled: {
+    backgroundColor: colors.brand,
   },
 });

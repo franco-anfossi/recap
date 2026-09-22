@@ -1,119 +1,65 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform, StyleSheet, Text } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { colors } from '@/constants/theme';
+import { colors, fonts } from '@/constants/theme';
+import { Ionicons } from '@expo/vector-icons';
+
+type IconName = keyof typeof Ionicons.glyphMap;
+
+const TABS: { name: string; title: string; icon: IconName; iconActive: IconName }[] = [
+  { name: 'index', title: 'Today', icon: 'sunny-outline', iconActive: 'sunny' },
+  { name: 'calendar', title: 'Calendar', icon: 'calendar-outline', iconActive: 'calendar' },
+  { name: 'stats', title: 'Insights', icon: 'stats-chart-outline', iconActive: 'stats-chart' },
+  { name: 'social', title: 'Friends', icon: 'people-outline', iconActive: 'people' },
+  { name: 'profile', title: 'You', icon: 'person-circle-outline', iconActive: 'person-circle' },
+];
 
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: colors.primary[500],
-        tabBarInactiveTintColor: colors.gray[400],
-        headerShown: true,
-        headerStyle: {
-          backgroundColor: colors.background,
-        },
-        headerShadowVisible: false,
-        headerTitleStyle: {
-          fontWeight: '600',
-          color: colors.text.primary,
-        },
+        headerShown: false,
+        tabBarActiveTintColor: colors.brand,
+        tabBarInactiveTintColor: colors.inkMuted,
         tabBarButton: HapticTab,
-        tabBarStyle: {
-          backgroundColor: colors.background,
-          borderTopColor: colors.gray[200],
-          borderTopWidth: 0.5,
-          paddingBottom: Platform.OS === 'ios' ? 24 : 8,
-          paddingTop: 8,
-          height: Platform.OS === 'ios' ? 88 : 60,
-        },
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '500',
-        },
+        tabBarStyle: styles.tabBar,
+        tabBarLabelStyle: styles.label,
+        tabBarItemStyle: styles.item,
+        sceneStyle: { backgroundColor: colors.background },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Today',
-          headerTitle: 'recap',
-          headerTitleStyle: styles.headerTitle,
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="📝" focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="calendar"
-        options={{
-          title: 'Calendar',
-          headerTitle: 'recap',
-          headerTitleStyle: styles.headerTitle,
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="📅" focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="stats"
-        options={{
-          title: 'Stats',
-          headerTitle: 'recap',
-          headerTitleStyle: styles.headerTitle,
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="📊" focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="social"
-        options={{
-          title: 'Social',
-          headerTitle: 'recap',
-          headerTitleStyle: styles.headerTitle,
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="👥" focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          headerTitle: 'recap',
-          headerTitleStyle: styles.headerTitle,
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="👤" focused={focused} />
-          ),
-        }}
-      />
+      {TABS.map((tab) => (
+        <Tabs.Screen
+          key={tab.name}
+          name={tab.name}
+          options={{
+            title: tab.title,
+            tabBarIcon: ({ focused, color }) => (
+              <Ionicons name={focused ? tab.iconActive : tab.icon} size={24} color={color} />
+            ),
+          }}
+        />
+      ))}
     </Tabs>
   );
 }
 
-function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
-  return (
-    <Text style={[styles.tabIcon, focused && styles.tabIconFocused]}>
-      {emoji}
-    </Text>
-  );
-}
-
 const styles = StyleSheet.create({
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.primary[500],
-    letterSpacing: -0.5,
+  tabBar: {
+    backgroundColor: colors.surface,
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    height: Platform.OS === 'ios' ? 86 : 68,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 26 : 10,
   },
-  tabIcon: {
-    fontSize: 22,
-    opacity: 0.6,
+  item: {
+    gap: 2,
   },
-  tabIconFocused: {
-    opacity: 1,
+  label: {
+    fontFamily: fonts.sansSemibold,
+    fontSize: 11,
   },
 });

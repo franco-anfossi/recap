@@ -1,6 +1,6 @@
-export * from './auth.store';
-export * from './entries.store';
-export * from './goals.store';
-export * from './social.store';
-export * from './ui.store';
-
+export { useAuthStore } from './auth.store';
+export { useEntriesStore } from './entries.store';
+export { useGoalsStore } from './goals.store';
+export { useOnboardingStore } from './onboarding.store';
+export { useSocialStore } from './social.store';
+export { useUIStore } from './ui.store';

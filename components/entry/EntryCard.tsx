@@ -1,11 +1,11 @@
-import { MoodIcon } from '@/components/mood';
-import { Card } from '@/components/ui';
-import { toMoodLevel } from '@/constants/moods';
-import { borderRadius, colors, spacing, typography } from '@/constants/theme';
+import { MoodFace } from '@/components/mood';
+import { MOODS, toMoodLevel } from '@/constants/moods';
+import { colors, radius, spacing, type } from '@/constants/theme';
 import { Entry } from '@/types';
+import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 interface EntryCardProps {
   entry: Entry;
@@ -14,70 +14,64 @@ interface EntryCardProps {
 }
 
 export function EntryCard({ entry, onPress, compact = false }: EntryCardProps) {
+  const level = toMoodLevel(entry.mood);
   const formattedDate = format(parseISO(entry.entry_date), compact ? 'MMM d' : 'EEEE, MMMM d');
 
-  const Content = (
-    <Card variant="elevated" padding={compact ? 'sm' : 'md'}>
-      <View style={styles.row}>
-        <MoodIcon mood={toMoodLevel(entry.mood)} size={compact ? 'md' : 'lg'} />
-        <View style={styles.content}>
-          <Text style={[styles.date, compact && styles.dateCompact]}>
-            {formattedDate}
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
+      style={({ pressed }) => [styles.card, compact && styles.cardCompact, pressed && styles.pressed]}
+    >
+      <MoodFace mood={level} size={compact ? 32 : 44} />
+      <View style={styles.content}>
+        <Text style={[styles.date, compact && styles.dateCompact]}>{formattedDate}</Text>
+        <Text style={[styles.mood, { color: MOODS[level].ink }]}>{MOODS[level].label}</Text>
+        {entry.note && !compact ? (
+          <Text style={styles.note} numberOfLines={2}>
+            {entry.note}
           </Text>
-          {entry.note && !compact && (
-            <Text style={styles.note} numberOfLines={2}>
-              {entry.note}
-            </Text>
-          )}
-        </View>
-        {entry.video_url && (
-          <View style={styles.videoIndicator}>
-            <Text style={styles.videoIcon}>🎬</Text>
-          </View>
-        )}
+        ) : null}
       </View>
-    </Card>
+      {onPress && <Ionicons name="chevron-forward" size={16} color={colors.inkMuted} />}
+    </Pressable>
   );
-
-  if (onPress) {
-    return (
-      <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
-        {Content}
-      </TouchableOpacity>
-    );
-  }
-
-  return Content;
 }
 
 const styles = StyleSheet.create({
-  row: {
+  card: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.s12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderCurve: 'continuous',
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  cardCompact: {
+    padding: spacing.s12,
+  },
+  pressed: {
+    backgroundColor: colors.surfaceMuted,
   },
   content: {
     flex: 1,
-    marginLeft: spacing.md,
+    gap: 2,
   },
   date: {
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.semibold,
-    color: colors.text.primary,
+    ...type.headline,
   },
   dateCompact: {
-    fontSize: typography.sizes.sm,
+    ...type.callout,
+  },
+  mood: {
+    ...type.caption,
   },
   note: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.secondary,
+    ...type.footnote,
     marginTop: spacing.xs,
-  },
-  videoIndicator: {
-    padding: spacing.xs,
-    backgroundColor: colors.gray[100],
-    borderRadius: borderRadius.sm,
-  },
-  videoIcon: {
-    fontSize: 16,
   },
 });

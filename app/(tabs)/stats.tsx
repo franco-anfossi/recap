@@ -1,429 +1,430 @@
-import { getMoodColor, getMoodInfo, toMoodLevel } from '@/constants/moods';
-import { borderRadius, colors, spacing, typography } from '@/constants/theme';
+import { MoodFace } from '@/components/mood';
+import { EmptyState, IconButton, Screen, ScreenHeader, StatTile } from '@/components/ui';
+import { MOODS, MOOD_LEVELS, MoodLevel, toMoodLevel } from '@/constants/moods';
+import { colors, fonts, radius, spacing, type } from '@/constants/theme';
+import { calculateCurrentStreak, calculateLongestStreak } from '@/lib/streak';
 import { useEntriesStore } from '@/stores';
 import { Entry } from '@/types';
-import { eachDayOfInterval, endOfMonth, endOfYear, format, getDay, isFuture, startOfMonth, startOfYear } from 'date-fns';
-import React, { useEffect, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  eachDayOfInterval,
+  endOfYear,
+  format,
+  getDay,
+  isAfter,
+  parseISO,
+  startOfYear,
+} from 'date-fns';
+import { router } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-type ViewMode = 'year' | 'month-stripes';
+const MONTHS_SHORT = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 export default function StatsScreen() {
   const { entries, fetchEntriesByYear } = useEntriesStore();
-  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
-  const [viewMode, setViewMode] = useState<ViewMode>('year');
-  const isViewingCurrentYear = currentYear >= new Date().getFullYear();
+  const [year, setYear] = useState(new Date().getFullYear());
+  const isCurrentYear = year >= new Date().getFullYear();
 
   useEffect(() => {
-    fetchEntriesByYear(currentYear);
-  }, [currentYear, fetchEntriesByYear]);
+    fetchEntriesByYear(year);
+  }, [year, fetchEntriesByYear]);
+
+  const yearEntries = useMemo(
+    () => entries.filter((e) => e.entry_date.startsWith(String(year))),
+    [entries, year]
+  );
+
+  const summary = useMemo(() => buildSummary(yearEntries, year), [yearEntries, year]);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <View style={styles.titleRow}>
-          <Text style={styles.title}>Your Mood Patterns</Text>
-          <View style={styles.yearControls}>
-            <TouchableOpacity
-              style={styles.yearButton}
-              onPress={() => setCurrentYear((year) => year - 1)}
-            >
-              <Text style={styles.yearButtonText}>‹</Text>
-            </TouchableOpacity>
-            <Text style={styles.yearText}>{currentYear}</Text>
-            <TouchableOpacity
-              style={[styles.yearButton, isViewingCurrentYear && styles.yearButtonDisabled]}
-              onPress={() => setCurrentYear((year) => year + 1)}
-              disabled={isViewingCurrentYear}
-            >
-              <Text style={[styles.yearButtonText, isViewingCurrentYear && styles.yearButtonTextDisabled]}>
-                ›
-              </Text>
-            </TouchableOpacity>
+    <Screen>
+      <ScreenHeader
+        eyebrow="Insights"
+        title={String(year)}
+        subtitle={summary ? `${summary.total} check-ins · ${summary.daysCovered}% of days so far` : undefined}
+        right={
+          <View style={styles.nav}>
+            <IconButton name="chevron-back" onPress={() => setYear((y) => y - 1)} label="Previous year" />
+            <View style={isCurrentYear && styles.navDisabled}>
+              <IconButton name="chevron-forward" onPress={() => !isCurrentYear && setYear((y) => y + 1)} label="Next year" />
+            </View>
           </View>
+        }
+      />
+
+      {!summary ? (
+        <EmptyState
+          icon="stats-chart-outline"
+          title={`Nothing logged in ${year}`}
+          message="Insights appear once you have a few check-ins. Start with today."
+          action={isCurrentYear ? { label: 'Log today', onPress: () => router.navigate('/(tabs)') } : undefined}
+          style={styles.empty}
+        />
+      ) : (
+        <>
+          <View style={styles.tiles}>
+            <StatTile
+              label="Average"
+              value={summary.avg.toFixed(1)}
+              hint={MOODS[toMoodLevel(summary.avg)].label}
+              accent={MOODS[toMoodLevel(summary.avg)].ink}
+            />
+            <StatTile
+              label="Best month"
+              value={summary.bestMonth ? MONTHS_LONG[summary.bestMonth.index].slice(0, 3) : '–'}
+              hint={summary.bestMonth ? `${summary.bestMonth.avg.toFixed(1)} avg` : undefined}
+            />
+          </View>
+          <View style={[styles.tiles, { marginTop: spacing.sm }]}>
+            <StatTile label="Current streak" value={`${summary.streak}d`} accent={summary.streak > 0 ? colors.brandStrong : undefined} />
+            <StatTile label="Longest streak" value={`${summary.longest}d`} />
+          </View>
+
+          <Section title="Month by month" caption="Average mood per month">
+            <MonthlyChart averages={summary.monthly} />
+          </Section>
+
+          <Section title="The year in days" caption="One square per day">
+            <YearHeatmap entries={yearEntries} year={year} />
+          </Section>
+
+          <Section title="Breakdown" caption="How often each mood showed up">
+            <Breakdown counts={summary.counts} total={summary.total} />
+          </Section>
+
+          {summary.bestDay && (
+            <View style={styles.highlight}>
+              <MoodFace mood={5} size={40} />
+              <View style={styles.highlightText}>
+                <Text style={styles.highlightTitle}>Great days: {summary.counts[5]}</Text>
+                <Text style={styles.highlightSub}>
+                  Most recent on {format(parseISO(summary.bestDay.entry_date), 'MMMM d')}
+                  {summary.bestDay.note ? ` — “${summary.bestDay.note.slice(0, 60)}${summary.bestDay.note.length > 60 ? '…' : ''}”` : ''}
+                </Text>
+              </View>
+            </View>
+          )}
+        </>
+      )}
+    </Screen>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Data
+// ---------------------------------------------------------------------------
+
+function buildSummary(entries: Entry[], year: number) {
+  if (entries.length === 0) return null;
+
+  const total = entries.length;
+  const avg = entries.reduce((s, e) => s + e.mood, 0) / total;
+
+  const monthly = Array.from({ length: 12 }, () => ({ sum: 0, count: 0 }));
+  entries.forEach((e) => {
+    const m = parseInt(e.entry_date.split('-')[1], 10) - 1;
+    monthly[m].sum += e.mood;
+    monthly[m].count += 1;
+  });
+  const averages = monthly.map((m) => (m.count > 0 ? m.sum / m.count : 0));
+
+  let bestMonth: { index: number; avg: number } | null = null;
+  averages.forEach((a, i) => {
+    if (a > 0 && (!bestMonth || a > bestMonth.avg)) bestMonth = { index: i, avg: a };
+  });
+
+  const counts = MOOD_LEVELS.reduce(
+    (acc, l) => ({ ...acc, [l]: entries.filter((e) => e.mood === l).length }),
+    {} as Record<MoodLevel, number>
+  );
+
+  const bestDay = entries
+    .filter((e) => e.mood === 5)
+    .sort((a, b) => b.entry_date.localeCompare(a.entry_date))[0];
+
+  const now = new Date();
+  const yearStart = startOfYear(new Date(year, 0, 1));
+  const yearEnd = endOfYear(yearStart);
+  const lastDay = isAfter(now, yearEnd) ? yearEnd : now;
+  const daysSoFar = Math.max(1, eachDayOfInterval({ start: yearStart, end: lastDay }).length);
+
+  return {
+    total,
+    avg,
+    monthly: averages,
+    bestMonth: bestMonth as { index: number; avg: number } | null,
+    counts,
+    bestDay,
+    streak: calculateCurrentStreak(entries),
+    longest: calculateLongestStreak(entries),
+    daysCovered: Math.min(100, Math.round((total / daysSoFar) * 100)),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Sections
+// ---------------------------------------------------------------------------
+
+function Section({ title, caption, children }: { title: string; caption?: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {caption && <Text style={styles.sectionCaption}>{caption}</Text>}
+      </View>
+      <View style={styles.sectionBody}>{children}</View>
+    </View>
+  );
+}
+
+function MonthlyChart({ averages }: { averages: number[] }) {
+  return (
+    <View style={styles.chart}>
+      {averages.map((avg, i) => {
+        const level = avg > 0 ? toMoodLevel(avg) : null;
+        const height = avg > 0 ? Math.max(6, (avg / 5) * 100) : 0;
+        return (
+          <View key={i} style={styles.barCol}>
+            <View style={styles.barTrack}>
+              {level && (
+                <View style={[styles.bar, { height: `${height}%`, backgroundColor: MOODS[level].color }]} />
+              )}
+            </View>
+            <Text style={styles.barLabel}>{MONTHS_SHORT[i]}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function YearHeatmap({ entries, year }: { entries: Entry[]; year: number }) {
+  const weeks = useMemo(() => {
+    const start = startOfYear(new Date(year, 0, 1));
+    const end = endOfYear(start);
+    const days = eachDayOfInterval({ start, end });
+    const byDate = new Map(entries.map((e) => [e.entry_date, e]));
+    const padded: (Date | null)[] = [...Array(getDay(start)).fill(null), ...days];
+    const cols: { date: Date | null; mood: MoodLevel | null; future: boolean }[][] = [];
+    const today = new Date();
+    for (let i = 0; i < padded.length; i += 7) {
+      cols.push(
+        padded.slice(i, i + 7).map((date) => {
+          if (!date) return { date: null, mood: null, future: false };
+          const entry = byDate.get(format(date, 'yyyy-MM-dd'));
+          return { date, mood: entry ? toMoodLevel(entry.mood) : null, future: isAfter(date, today) };
+        })
+      );
+    }
+    return cols;
+  }, [entries, year]);
+
+  // Month labels: position of first week that contains day 1 of each month.
+  const monthMarks = useMemo(() => {
+    const marks: { label: string; col: number }[] = [];
+    weeks.forEach((week, col) => {
+      week.forEach((cell) => {
+        if (cell.date && cell.date.getDate() === 1) {
+          marks.push({ label: format(cell.date, 'MMM'), col });
+        }
+      });
+    });
+    return marks;
+  }, [weeks]);
+
+  const CELL = 11;
+  const GAP = 3;
+
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.heatmapScroll}>
+      <View>
+        <View style={[styles.heatmapMonths, { height: 16 }]}>
+          {monthMarks.map((m) => (
+            <Text key={m.label} style={[styles.heatmapMonth, { left: m.col * (CELL + GAP) }]}>
+              {m.label}
+            </Text>
+          ))}
         </View>
-        <View style={styles.toggles}>
-          <TouchableOpacity
-            style={[styles.toggle, viewMode === 'year' && styles.toggleActive]}
-            onPress={() => setViewMode('year')}
-          >
-            <Text style={[styles.toggleText, viewMode === 'year' && styles.toggleTextActive]}>Yearly Heatmap</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.toggle, viewMode === 'month-stripes' && styles.toggleActive]}
-            onPress={() => setViewMode('month-stripes')}
-          >
-            <Text style={[styles.toggleText, viewMode === 'month-stripes' && styles.toggleTextActive]}>Monthly Stripes</Text>
-          </TouchableOpacity>
+        <View style={[styles.heatmap, { gap: GAP }]}>
+          {weeks.map((week, w) => (
+            <View key={w} style={{ gap: GAP }}>
+              {week.map((cell, d) => (
+                <View
+                  key={d}
+                  style={[
+                    styles.heatCell,
+                    { width: CELL, height: CELL },
+                    cell.date === null && { backgroundColor: 'transparent' },
+                    cell.mood !== null && { backgroundColor: MOODS[cell.mood].color },
+                    cell.future && { backgroundColor: colors.surfaceMuted, opacity: 0.5 },
+                  ]}
+                />
+              ))}
+            </View>
+          ))}
         </View>
       </View>
-
-      <MonthlyAverageChart entries={entries} />
-
-      {viewMode === 'year' && <YearlyHeatmap entries={entries} year={currentYear} />}
-      {viewMode === 'month-stripes' && <MonthlyStripes entries={entries} year={currentYear} />}
-
-      <MoodStats entries={entries} />
     </ScrollView>
   );
 }
 
-function MonthlyAverageChart({ entries }: { entries: Entry[] }) {
-  const averages = React.useMemo(() => {
-    const months = Array(12).fill(0).map(() => ({ sum: 0, count: 0 }));
-    entries.forEach(e => {
-      const monthIndex = parseInt(e.entry_date.split('-')[1], 10) - 1;
-      if (months[monthIndex]) {
-        months[monthIndex].sum += e.mood;
-        months[monthIndex].count += 1;
-      }
-    });
-    return months.map(m => m.count > 0 ? m.sum / m.count : 0);
-  }, [entries]);
-
-  const monthNames = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
-  const maxAverage = 5;
-
+function Breakdown({ counts, total }: { counts: Record<MoodLevel, number>; total: number }) {
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Monthly Average</Text>
-      <View style={styles.chartContainer}>
-        {averages.map((avg, index) => {
-          const height = (avg / maxAverage) * 100;
-          const moodInfo = avg > 0 ? getMoodInfo(toMoodLevel(avg)) : null;
-
-          return (
-            <View key={index} style={styles.barColumn}>
-              <View style={styles.barTrack}>
-                {avg > 0 && (
-                  <View
-                    style={[
-                      styles.bar,
-                      {
-                        height: `${height}%`,
-                        backgroundColor: moodInfo?.color || colors.primary[200]
-                      }
-                    ]}
-                  />
-                )}
-              </View>
-              <Text style={styles.barLabel}>{monthNames[index]}</Text>
-              {avg > 0 && <Text style={styles.barValue}>{avg.toFixed(1)}</Text>}
+    <View style={styles.breakdown}>
+      {[5, 4, 3, 2, 1].map((level) => {
+        const l = level as MoodLevel;
+        const count = counts[l] || 0;
+        const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+        return (
+          <View key={level} style={styles.breakRow}>
+            <MoodFace mood={l} size={26} />
+            <Text style={styles.breakLabel}>{MOODS[l].label}</Text>
+            <View style={styles.breakTrack}>
+              <View style={[styles.breakFill, { width: `${pct}%`, backgroundColor: MOODS[l].color }]} />
             </View>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
-function YearlyHeatmap({ entries, year }: { entries: Entry[], year: number }) {
-  const start = startOfYear(new Date(year, 0, 1));
-  const end = endOfYear(new Date(year, 0, 1));
-  const days = eachDayOfInterval({ start, end });
-
-  // Group by week for column layout
-  // We need to pad the start to align with Sunday/Monday
-  const startDay = getDay(start); // 0 = Sunday
-  const paddedDays = [...Array(startDay).fill(null), ...days];
-
-  const weeks = [];
-  for (let i = 0; i < paddedDays.length; i += 7) {
-    weeks.push(paddedDays.slice(i, i + 7));
-  }
-
-  const getEntry = (date: Date) => entries.find(e => e.entry_date === format(date, 'yyyy-MM-dd'));
-
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{year} Overview</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={styles.heatmap}>
-          {weeks.map((week, wIndex) => (
-            <View key={wIndex} style={styles.heatmapColumn}>
-              {week.map((date, dIndex) => {
-                if (!date) return <View key={dIndex} style={styles.heatmapCellEmpty} />;
-                const entry = getEntry(date);
-                const color = entry ? getMoodColor(toMoodLevel(entry.mood)) : colors.gray[200];
-                return (
-                  <View
-                    key={date.toISOString()}
-                    style={[
-                      styles.heatmapCell,
-                      { backgroundColor: color },
-                      !entry && { opacity: 0.3 }
-                    ]}
-                  />
-                );
-              })}
-            </View>
-          ))}
-        </View>
-      </ScrollView>
-    </View>
-  );
-}
-
-function MonthlyStripes({ entries, year }: { entries: Entry[], year: number }) {
-  // Just showing current month for now as an example, but could loop through all
-  const currentMonth = new Date().getMonth();
-  const start = startOfMonth(new Date(year, currentMonth, 1));
-  const end = endOfMonth(new Date(year, currentMonth, 1));
-  const days = eachDayOfInterval({ start, end });
-
-  const getEntry = (date: Date) => entries.find(e => e.entry_date === format(date, 'yyyy-MM-dd'));
-
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{format(start, 'MMMM')} Vibes</Text>
-      <View style={styles.stripesContainer}>
-        {days.map((date, index) => {
-          if (isFuture(date)) return null;
-          const entry = getEntry(date);
-          const color = entry ? getMoodColor(toMoodLevel(entry.mood)) : colors.gray[200];
-          return (
-            <View
-              key={date.toISOString()}
-              style={[
-                styles.stripe,
-                { backgroundColor: color, height: 40, flex: 1 }
-              ]}
-            />
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
-function MoodStats({ entries }: { entries: Entry[] }) {
-  if (entries.length === 0) return null;
-
-  const total = entries.length;
-  const moodCounts = entries.reduce((acc, curr) => {
-    acc[curr.mood] = (acc[curr.mood] || 0) + 1;
-    return acc;
-  }, {} as Record<number, number>);
-
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Breakdown</Text>
-      <View style={styles.statsGrid}>
-        {[5, 4, 3, 2, 1].map((mood) => {
-          const count = moodCounts[mood] || 0;
-          const percentage = Math.round((count / total) * 100);
-          const info = getMoodInfo(toMoodLevel(mood));
-
-          return (
-            <View key={mood} style={styles.statRow}>
-              <Text style={styles.statEmoji}>{info.emoji}</Text>
-              <View style={styles.statBarContainer}>
-                <View style={[styles.statBar, { width: `${percentage}%`, backgroundColor: info.color }]} />
-              </View>
-              <Text style={styles.statLabel}>{percentage}%</Text>
-            </View>
-          );
-        })}
-      </View>
+            <Text style={styles.breakValue}>{pct}%</Text>
+          </View>
+        );
+      })}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  content: {
-    padding: spacing.lg,
-  },
-  header: {
-    marginBottom: spacing.xl,
-  },
-  titleRow: {
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  title: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.text.primary,
-  },
-  yearControls: {
+  nav: {
     flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: colors.gray[100],
-    borderRadius: borderRadius.md,
-    padding: 2,
+    gap: spacing.sm,
   },
-  yearButton: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: borderRadius.sm,
-  },
-  yearButtonDisabled: {
+  navDisabled: {
     opacity: 0.35,
   },
-  yearButtonText: {
-    fontSize: 22,
-    color: colors.primary[600],
-    fontWeight: typography.weights.bold,
+  empty: {
+    marginTop: spacing.xxl,
   },
-  yearButtonTextDisabled: {
-    color: colors.gray[400],
-  },
-  yearText: {
-    minWidth: 48,
-    textAlign: 'center',
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.bold,
-    color: colors.text.primary,
-  },
-  toggles: {
+  tiles: {
     flexDirection: 'row',
-    backgroundColor: colors.gray[100],
-    padding: 4,
-    borderRadius: borderRadius.md,
-  },
-  toggle: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-    borderRadius: borderRadius.sm,
-  },
-  toggleActive: {
-    backgroundColor: colors.surface,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-  },
-  toggleText: {
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.medium,
-    color: colors.text.secondary,
-  },
-  toggleTextActive: {
-    color: colors.text.primary,
-    fontWeight: typography.weights.bold,
+    gap: spacing.sm,
   },
   section: {
-    marginBottom: spacing.xxl,
-    backgroundColor: colors.surface,
-    padding: spacing.md,
-    borderRadius: borderRadius.lg,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+    marginTop: spacing.xl,
+    gap: spacing.s12,
+  },
+  sectionHeader: {
+    gap: 2,
   },
   sectionTitle: {
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.bold,
-    color: colors.text.primary,
-    marginBottom: spacing.md,
+    ...type.title2,
   },
-  // Heatmap styles
-  heatmap: {
+  sectionCaption: {
+    ...type.footnote,
+  },
+  sectionBody: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+  },
+  chart: {
     flexDirection: 'row',
-    gap: 4,
-  },
-  heatmapColumn: {
-    gap: 4,
-  },
-  heatmapCell: {
-    width: 12,
-    height: 12,
-    borderRadius: 2,
-  },
-  heatmapCellEmpty: {
-    width: 12,
-    height: 12,
-  },
-  // Stripe styles
-  stripesContainer: {
-    flexDirection: 'row',
-    height: 80,
-    borderRadius: borderRadius.md,
-    overflow: 'hidden',
-  },
-  stripe: {
-    // flex: 1 handled inline
-  },
-  // Stats styles
-  statsGrid: {
-    gap: spacing.md,
-  },
-  statRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  statEmoji: {
-    fontSize: 20,
-    width: 30,
-  },
-  statBarContainer: {
-    flex: 1,
-    height: 8,
-    backgroundColor: colors.gray[100],
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  statBar: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  statLabel: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.secondary,
-    width: 40,
-    textAlign: 'right',
-  },
-  // Chart styles
-  chartContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
     height: 150,
-    paddingTop: spacing.md,
+    gap: spacing.xs,
   },
-  barColumn: {
-    alignItems: 'center',
-    gap: 4,
+  barCol: {
     flex: 1,
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   barTrack: {
-    width: 8,
     flex: 1,
-    backgroundColor: colors.gray[100],
-    borderRadius: 4,
+    width: '100%',
+    maxWidth: 18,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.xs,
     justifyContent: 'flex-end',
+    overflow: 'hidden',
   },
   bar: {
     width: '100%',
-    borderRadius: 4,
-    minHeight: 4,
+    borderRadius: radius.xs,
   },
   barLabel: {
+    ...type.caption,
     fontSize: 10,
-    color: colors.text.secondary,
-    fontWeight: '500',
   },
-  barValue: {
-    fontSize: 8,
-    color: colors.text.muted,
+  heatmapScroll: {
+    paddingVertical: spacing.xs,
+  },
+  heatmapMonths: {
+    position: 'relative',
+    marginBottom: spacing.xs,
+  },
+  heatmapMonth: {
     position: 'absolute',
-    top: -15,
+    ...type.caption,
+    fontSize: 10,
+  },
+  heatmap: {
+    flexDirection: 'row',
+  },
+  heatCell: {
+    borderRadius: 3,
+    backgroundColor: colors.surfaceSunken,
+  },
+  breakdown: {
+    gap: spacing.s12,
+  },
+  breakRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  breakLabel: {
+    ...type.callout,
+    fontSize: 14,
+    width: 48,
+  },
+  breakTrack: {
+    flex: 1,
+    height: 10,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.full,
+    overflow: 'hidden',
+  },
+  breakFill: {
+    height: '100%',
+    borderRadius: radius.full,
+  },
+  breakValue: {
+    fontFamily: fonts.sansSemibold,
+    fontSize: 13,
+    color: colors.inkSecondary,
+    width: 38,
+    textAlign: 'right',
+  },
+  highlight: {
+    marginTop: spacing.xl,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s12,
+    backgroundColor: MOODS[5].tint,
+    borderRadius: radius.lg,
+    borderCurve: 'continuous',
+    padding: spacing.md,
+  },
+  highlightText: {
+    flex: 1,
+    gap: 2,
+  },
+  highlightTitle: {
+    ...type.headline,
+    color: MOODS[5].ink,
+  },
+  highlightSub: {
+    ...type.footnote,
+    color: MOODS[5].ink,
+    opacity: 0.85,
   },
 });

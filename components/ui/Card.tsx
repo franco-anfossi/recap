@@ -1,11 +1,11 @@
-import { borderRadius, colors, shadows, spacing } from '@/constants/theme';
+import { colors, radius, shadows, spacing } from '@/constants/theme';
 import React from 'react';
-import { StyleSheet, View, ViewStyle } from 'react-native';
+import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
 interface CardProps {
   children: React.ReactNode;
-  style?: ViewStyle;
-  variant?: 'default' | 'elevated' | 'outlined';
+  style?: StyleProp<ViewStyle>;
+  variant?: 'default' | 'elevated' | 'outlined' | 'muted' | 'tinted';
   padding?: 'none' | 'sm' | 'md' | 'lg';
 }
 
@@ -25,7 +25,8 @@ export function Card({
 const styles = StyleSheet.create({
   base: {
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
+    borderRadius: radius.lg,
+    borderCurve: 'continuous',
   },
   default: {
     ...shadows.sm,
@@ -35,20 +36,24 @@ const styles = StyleSheet.create({
   },
   outlined: {
     borderWidth: 1,
-    borderColor: colors.gray[200],
-    shadowOpacity: 0,
-    elevation: 0,
+    borderColor: colors.border,
+  },
+  muted: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  tinted: {
+    backgroundColor: colors.brandTint,
   },
   padding_none: {
     padding: 0,
   },
   padding_sm: {
-    padding: spacing.sm,
+    padding: spacing.s12,
   },
   padding_md: {
     padding: spacing.md,
   },
   padding_lg: {
-    padding: spacing.lg,
+    padding: spacing.s20,
   },
 });

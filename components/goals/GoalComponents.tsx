@@ -1,8 +1,19 @@
-import { Button } from '@/components/ui';
-import { borderRadius, colors, spacing, typography } from '@/constants/theme';
+import { Button, Input, TextArea } from '@/components/ui';
+import { colors, radius, spacing, type } from '@/constants/theme';
 import { YearlyGoal } from '@/types';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import React, { useState } from 'react';
-import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface GoalItemProps {
   goal: YearlyGoal;
@@ -11,29 +22,42 @@ interface GoalItemProps {
 }
 
 export function GoalItem({ goal, onToggle, onDelete }: GoalItemProps) {
-  return (
-    <View style={styles.goalContainer}>
-      <TouchableOpacity
-        style={styles.checkboxContainer}
-        onPress={() => onToggle(goal.id, !goal.is_completed)}
-      >
-        <View style={[styles.checkbox, goal.is_completed && styles.checked]}>
-          {goal.is_completed && <Text style={styles.checkmark}>✓</Text>}
-        </View>
-      </TouchableOpacity>
+  const toggle = () => {
+    if (process.env.EXPO_OS === 'ios') {
+      Haptics.notificationAsync(
+        goal.is_completed ? Haptics.NotificationFeedbackType.Warning : Haptics.NotificationFeedbackType.Success
+      );
+    }
+    onToggle(goal.id, !goal.is_completed);
+  };
 
-      <View style={styles.content}>
-        <Text style={[styles.title, goal.is_completed && styles.completedText]}>
-          {goal.title}
-        </Text>
-        {goal.description && (
-          <Text style={styles.description}>{goal.description}</Text>
-        )}
+  return (
+    <View style={[styles.goal, goal.is_completed && styles.goalDone]}>
+      <Pressable
+        onPress={toggle}
+        hitSlop={8}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: goal.is_completed }}
+        accessibilityLabel={goal.title}
+        style={[styles.checkbox, goal.is_completed && styles.checkboxDone]}
+      >
+        {goal.is_completed && <Ionicons name="checkmark" size={16} color={colors.inkOnBrand} />}
+      </Pressable>
+
+      <View style={styles.goalText}>
+        <Text style={[styles.goalTitle, goal.is_completed && styles.goalTitleDone]}>{goal.title}</Text>
+        {goal.description ? <Text style={styles.goalDescription}>{goal.description}</Text> : null}
       </View>
 
-      <TouchableOpacity onPress={() => onDelete(goal.id)} style={styles.deleteButton}>
-        <Text style={styles.deleteText}>×</Text>
-      </TouchableOpacity>
+      <Pressable
+        onPress={() => onDelete(goal.id)}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={`Delete ${goal.title}`}
+        style={({ pressed }) => [styles.delete, pressed && { opacity: 0.6 }]}
+      >
+        <Ionicons name="close" size={18} color={colors.inkMuted} />
+      </Pressable>
     </View>
   );
 }
@@ -45,138 +69,147 @@ interface AddGoalModalProps {
 }
 
 export function AddGoalModal({ visible, onClose, onAdd }: AddGoalModalProps) {
+  const insets = useSafeAreaInsets();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
 
-  const handleAdd = () => {
-    if (!title.trim()) return;
-    onAdd(title, description);
+  const reset = () => {
     setTitle('');
     setDescription('');
+  };
+
+  const handleAdd = () => {
+    if (!title.trim()) return;
+    onAdd(title.trim(), description.trim() || undefined);
+    reset();
+    onClose();
+  };
+
+  const handleClose = () => {
+    reset();
     onClose();
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>New Yearly Goal</Text>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.overlay}>
+        <Pressable style={styles.backdrop} onPress={handleClose} accessibilityLabel="Close" />
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md }]}>
+          <View style={styles.grabber} />
+          <Text style={styles.sheetTitle}>New intention</Text>
+          <Text style={styles.sheetSub}>Something for this year. Keep it small enough to actually do.</Text>
 
-          <TextInput
-            style={styles.input}
-            placeholder="What's your goal?"
+          <Input
+            placeholder="e.g. Run twice a week"
             value={title}
             onChangeText={setTitle}
             autoFocus
+            autoCapitalize="sentences"
+            returnKeyType="next"
           />
-
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            placeholder="Description (optional)"
+          <TextArea
+            placeholder="Why it matters (optional)"
             value={description}
             onChangeText={setDescription}
-            multiline
+            maxLength={200}
+            style={{ minHeight: 72 }}
           />
 
           <View style={styles.actions}>
-            <Button title="Cancel" variant="ghost" onPress={onClose} style={{ flex: 1 }} />
-            <Button title="Add Goal" onPress={handleAdd} style={{ flex: 1 }} />
+            <Button title="Cancel" variant="secondary" onPress={handleClose} style={styles.action} />
+            <Button title="Add" onPress={handleAdd} disabled={!title.trim()} style={styles.action} />
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  // Goal Item
-  goalContainer: {
+  goal: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.s12,
     backgroundColor: colors.surface,
     padding: spacing.md,
-    borderRadius: borderRadius.md,
-    marginBottom: spacing.sm,
+    borderRadius: radius.lg,
+    borderCurve: 'continuous',
     borderWidth: 1,
-    borderColor: colors.gray[100],
+    borderColor: colors.border,
   },
-  checkboxContainer: {
-    padding: spacing.xs,
+  goalDone: {
+    backgroundColor: colors.surfaceMuted,
   },
   checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 26,
+    height: 26,
+    borderRadius: radius.full,
     borderWidth: 2,
-    borderColor: colors.primary[300],
+    borderColor: colors.borderStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checked: {
-    backgroundColor: colors.primary[500],
-    borderColor: colors.primary[500],
+  checkboxDone: {
+    backgroundColor: colors.brand,
+    borderColor: colors.brand,
   },
-  checkmark: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  content: {
+  goalText: {
     flex: 1,
-    marginLeft: spacing.sm,
+    gap: 2,
   },
-  title: {
-    fontSize: typography.sizes.md,
-    color: colors.text.primary,
-    fontWeight: typography.weights.medium,
+  goalTitle: {
+    ...type.bodyMedium,
   },
-  description: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.secondary,
-  },
-  completedText: {
+  goalTitleDone: {
     textDecorationLine: 'line-through',
-    color: colors.text.muted,
+    color: colors.inkMuted,
   },
-  deleteButton: {
-    padding: spacing.sm,
+  goalDescription: {
+    ...type.footnote,
   },
-  deleteText: {
-    fontSize: 20,
-    color: colors.gray[400],
-  },
-  // Modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+  delete: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
     justifyContent: 'center',
-    padding: spacing.lg,
   },
-  modalContent: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
+  overlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
   },
-  modalTitle: {
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.bold,
-    marginBottom: spacing.md,
-    textAlign: 'center',
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.overlay,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.gray[200],
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    fontSize: typography.sizes.md,
+  sheet: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    borderCurve: 'continuous',
+    padding: spacing.screen,
+    gap: spacing.md,
   },
-  textArea: {
-    height: 80,
-    textAlignVertical: 'top',
+  grabber: {
+    alignSelf: 'center',
+    width: 36,
+    height: 5,
+    borderRadius: radius.full,
+    backgroundColor: colors.borderStrong,
+    marginBottom: spacing.xs,
+  },
+  sheetTitle: {
+    ...type.title1,
+  },
+  sheetSub: {
+    ...type.subhead,
+    marginTop: -spacing.sm,
   },
   actions: {
     flexDirection: 'row',
-    gap: spacing.md,
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  action: {
+    flex: 1,
   },
 });

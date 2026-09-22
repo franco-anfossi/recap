@@ -1,25 +1,33 @@
-import { Card } from '@/components/ui';
+import { MoodFace } from '@/components/mood';
+import { Avatar } from '@/components/ui';
 import { getMoodInfo, toMoodLevel } from '@/constants/moods';
-import { colors, spacing, typography } from '@/constants/theme';
+import { colors, fonts, radius, shadows, spacing, type } from '@/constants/theme';
 import { useAuthStore } from '@/stores';
 import { Entry, Profile, Reaction } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
-import { format, parseISO } from 'date-fns';
+import { format, isToday, isYesterday, parseISO } from 'date-fns';
+import * as Haptics from 'expo-haptics';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 
 interface FeedEntryProps {
   entry: Entry & { profiles: Profile; entry_reactions?: Reaction[] };
   onReact?: (emoji: string | null) => void;
 }
 
-const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '🙌', '👏', '🔥', '🎉'];
+const REACTION_EMOJIS = ['❤️', '🙌', '🔥', '😂', '😮', '😢'];
+
+function relativeDay(date: Date) {
+  if (isToday(date)) return 'Today';
+  if (isYesterday(date)) return 'Yesterday';
+  return format(date, 'MMM d');
+}
 
 export function FeedEntry({ entry, onReact }: FeedEntryProps) {
   const { user: currentUser } = useAuthStore();
   const { mood, note, profiles: user, entry_date, user_id, entry_reactions = [] } = entry;
 
-  // Local state for optimistic updates
   const [localReactions, setLocalReactions] = React.useState<Reaction[]>(entry_reactions);
   const [showPicker, setShowPicker] = React.useState(false);
 
@@ -28,48 +36,38 @@ export function FeedEntry({ entry, onReact }: FeedEntryProps) {
   }, [entry_reactions]);
 
   const isSelf = currentUser?.id === user_id;
+  const myReaction = localReactions.find((r) => r.user_id === currentUser?.id)?.emoji || null;
 
-  // Find my reaction in local state
-  const myReactionEntry = localReactions.find(r => r.user_id === currentUser?.id);
-  const myReaction = myReactionEntry?.emoji || null;
-
-  // Group reactions by emoji
   const reactionCounts: Record<string, number> = {};
-  localReactions.forEach(r => {
+  localReactions.forEach((r) => {
     reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
   });
+  const reactionEntries = Object.entries(reactionCounts);
 
-  const moodInfo = getMoodInfo(toMoodLevel(mood));
-  const formattedDate = format(parseISO(entry_date), 'MMM d');
-
-  // Safety check if user profile is missing (e.g. RLS or join issue)
-  const displayName = user?.display_name || 'Anonymous';
-  const initial = (user?.display_name?.[0] || user?.email?.[0] || '?').toUpperCase();
+  const level = toMoodLevel(mood);
+  const moodInfo = getMoodInfo(level);
+  const displayName = isSelf ? 'You' : user?.display_name || 'Anonymous';
 
   const handleReact = (emoji: string) => {
     setShowPicker(false);
+    if (process.env.EXPO_OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     const isRemoving = myReaction === emoji;
 
-    // Optimistic Update
     if (currentUser) {
-      setLocalReactions(prev => {
-        // Always remove existing reaction from this user first
-        const filtered = prev.filter(r => r.user_id !== currentUser.id);
-
-        if (isRemoving) {
-          return filtered; // Just remove
-        } else {
-          // Add new reaction
-          const newReaction: Reaction = {
+      setLocalReactions((prev) => {
+        const filtered = prev.filter((r) => r.user_id !== currentUser.id);
+        if (isRemoving) return filtered;
+        return [
+          ...filtered,
+          {
             id: 'optimistic-' + Date.now(),
             user_id: currentUser.id,
             entry_id: entry.id,
-            emoji: emoji,
-            created_at: new Date().toISOString()
-          };
-          return [...filtered, newReaction];
-        }
+            emoji,
+            created_at: new Date().toISOString(),
+          },
+        ];
       });
     }
 
@@ -77,278 +75,215 @@ export function FeedEntry({ entry, onReact }: FeedEntryProps) {
   };
 
   return (
-    <Card style={styles.container} padding="md">
+    <View style={styles.card}>
       <View style={styles.header}>
-        <View style={styles.userInfo}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {initial}
-            </Text>
-          </View>
-          <View>
-            <Text style={styles.name}>{displayName}</Text>
-            <Text style={styles.date}>{formattedDate}</Text>
-          </View>
+        <Avatar name={user?.display_name} fallback={user?.email} size={40} tone={isSelf ? 'brand' : 'muted'} />
+        <View style={styles.identity}>
+          <Text style={styles.name} numberOfLines={1}>
+            {displayName}
+          </Text>
+          <Text style={styles.date}>{relativeDay(parseISO(entry_date))}</Text>
         </View>
-        <View style={[styles.moodBadge, { backgroundColor: moodInfo.color }]}>
-          <Text style={styles.moodEmoji}>{moodInfo.emoji}</Text>
+        <View style={[styles.moodBadge, { backgroundColor: moodInfo.tint }]}>
+          <MoodFace mood={level} size={26} />
+          <Text style={[styles.moodLabel, { color: moodInfo.ink }]}>{moodInfo.label}</Text>
         </View>
       </View>
 
-      {note && (
-        <Text style={styles.note}>{note}</Text>
-      )}
+      {note ? <Text style={styles.note}>{note}</Text> : null}
 
-      {/* Reaction Action Section */}
-      {(!isSelf || Object.keys(reactionCounts).length > 0) && (
+      {(!isSelf || reactionEntries.length > 0) && (
         <View style={styles.footer}>
-
-          {/* Left: Add Button & Floating Bubble (Only for others) */}
-          <View style={styles.leftAction}>
-            {!isSelf && (
-              <>
-                {/* Floating Bubble Picker */}
-                {showPicker && (
-                  <>
-                    {/* Card-level overlay to catch taps outside the bubble */}
-                    <TouchableOpacity
-                      style={styles.cardOverlay}
-                      activeOpacity={1}
-                      onPress={() => setShowPicker(false)}
-                    />
-                    <View style={styles.floatingBubble}>
-                      {REACTION_EMOJIS.map(emoji => (
-                        <TouchableOpacity
-                          key={emoji}
-                          style={[styles.bubbleEmoji, myReaction === emoji && styles.bubbleEmojiActive]}
-                          onPress={() => handleReact(emoji)}
-                        >
-                          <Text style={styles.bubbleEmojiText}>{emoji}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </>
-                )}
-
-                <TouchableOpacity
-                  style={styles.addButton}
-                  onPress={() => setShowPicker(!showPicker)}
+          <View style={styles.reactions}>
+            {reactionEntries.map(([emoji, count]) => {
+              const mine = myReaction === emoji;
+              return (
+                <Pressable
+                  key={emoji}
+                  onPress={() => !isSelf && handleReact(emoji)}
+                  disabled={isSelf}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${emoji} ${count}`}
+                  style={[styles.reaction, mine && styles.reactionMine]}
                 >
-                  <Ionicons name="add-circle-outline" size={24} color={colors.text.secondary} />
-                </TouchableOpacity>
-              </>
-            )}
+                  <Text style={styles.reactionEmoji}>{emoji}</Text>
+                  <Text style={[styles.reactionCount, mine && styles.reactionCountMine]}>{count}</Text>
+                </Pressable>
+              );
+            })}
           </View>
 
-          {/* Right: Existing Reaction Groups */}
-          {Object.keys(reactionCounts).length > 0 && (
-            <View style={styles.rightReactions}>
-              {Object.entries(reactionCounts).map(([emoji, count]) => {
-                const isActiveGroup = myReaction === emoji;
-                return (
-                  <TouchableOpacity
-                    key={emoji}
-                    style={[styles.miniReaction, isActiveGroup && styles.miniReactionActive]}
-                    onPress={() => !isSelf && handleReact(emoji)}
-                    disabled={isSelf}
-                  >
-                    <Text style={[styles.miniReactionEmoji, isActiveGroup && styles.miniReactionEmojiActive]}>
-                      {emoji} {count}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+          {!isSelf && (
+            <View>
+              {showPicker && (
+                <>
+                  <Pressable style={styles.pickerBackdrop} onPress={() => setShowPicker(false)} />
+                  <Animated.View entering={ZoomIn.duration(180)} exiting={FadeOut.duration(120)} style={styles.picker}>
+                    {REACTION_EMOJIS.map((emoji, i) => (
+                      <Animated.View key={emoji} entering={FadeIn.delay(i * 30).duration(150)}>
+                        <Pressable
+                          onPress={() => handleReact(emoji)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`React ${emoji}`}
+                          style={({ pressed }) => [
+                            styles.pickerItem,
+                            myReaction === emoji && styles.pickerItemActive,
+                            pressed && { transform: [{ scale: 1.2 }] },
+                          ]}
+                        >
+                          <Text style={styles.pickerEmoji}>{emoji}</Text>
+                        </Pressable>
+                      </Animated.View>
+                    ))}
+                  </Animated.View>
+                </>
+              )}
+              <Pressable
+                onPress={() => setShowPicker((s) => !s)}
+                accessibilityRole="button"
+                accessibilityLabel="Add reaction"
+                style={({ pressed }) => [styles.addReaction, pressed && { opacity: 0.7 }]}
+              >
+                <Ionicons name={myReaction ? 'happy' : 'happy-outline'} size={18} color={myReaction ? colors.brand : colors.inkSecondary} />
+                <Text style={[styles.addReactionText, myReaction && { color: colors.brand }]}>{myReaction ? 'Reacted' : 'React'}</Text>
+              </Pressable>
             </View>
           )}
-
         </View>
       )}
-    </Card>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    marginBottom: spacing.md,
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderCurve: 'continuous',
+    padding: spacing.md,
+    gap: spacing.s12,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.md,
-  },
-  userInfo: {
-    flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.s12,
   },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.gray[100],
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.sm,
-  },
-  avatarText: {
-    fontSize: typography.sizes.md,
-    fontWeight: 'bold',
-    color: colors.gray[600],
+  identity: {
+    flex: 1,
+    gap: 2,
   },
   name: {
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.bold,
-    color: colors.text.primary,
+    ...type.headline,
   },
   date: {
-    fontSize: typography.sizes.xs,
-    color: colors.text.secondary,
+    ...type.caption,
   },
   moodBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingLeft: spacing.xs,
+    paddingRight: spacing.s12,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.full,
   },
-  moodEmoji: {
-    fontSize: 20,
+  moodLabel: {
+    fontFamily: fonts.sansSemibold,
+    fontSize: 13,
   },
   note: {
-    fontSize: typography.sizes.md,
-    color: colors.text.primary,
-    lineHeight: 24,
-    marginBottom: spacing.md,
+    fontFamily: fonts.displayItalic,
+    fontSize: 17,
+    lineHeight: 26,
+    color: colors.ink,
   },
   footer: {
-    borderTopWidth: 1,
-    borderTopColor: colors.gray[100],
-    paddingTop: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 40,
+    gap: spacing.sm,
+    minHeight: 32,
   },
-  leftAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  reactions: {
     flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs + 2,
   },
-  rightReactions: {
+  reaction: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-    justifyContent: 'flex-end',
-    maxWidth: '60%',
-  },
-  addButton: {
-    padding: spacing.xs,
-    position: 'relative',
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  plusBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: colors.text.secondary,
-    borderRadius: 6,
-    width: 12,
-    height: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xs,
     borderWidth: 1,
-    borderColor: 'white',
+    borderColor: 'transparent',
   },
-  footerText: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.secondary,
-    fontWeight: '600',
+  reactionMine: {
+    backgroundColor: colors.brandTint,
+    borderColor: colors.brandSoft,
   },
-  footerTextDisabled: {
-    color: colors.gray[400],
-  },
-  reactionButtonDisabled: {
-    opacity: 0.7,
-  },
-  reactionsList: {
-    // Legacy list style (removed usage but keeping for safety if referenced elsewhere, though we replaced it)
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 4,
-    marginBottom: spacing.sm,
-    paddingHorizontal: spacing.xs,
-  },
-  miniReaction: {
-    backgroundColor: colors.gray[100],
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  miniReactionActive: {
-    backgroundColor: colors.primary[100],
-    borderWidth: 1,
-    borderColor: colors.primary[200],
-  },
-  miniReactionEmoji: {
-    fontSize: 12,
-    color: colors.text.secondary,
-    fontWeight: '500',
-  },
-  miniReactionEmojiActive: {
-    color: colors.primary[900],
-    fontWeight: '700',
+  reactionEmoji: {
+    fontSize: 14,
   },
   reactionCount: {
-    fontSize: typography.sizes.xs,
-    color: colors.text.secondary,
-    marginLeft: 4,
+    fontFamily: fonts.sansSemibold,
+    fontSize: 12,
+    color: colors.inkSecondary,
   },
-  // Floating Bubble Styles
-  floatingBubble: {
-    position: 'absolute',
-    bottom: 40,
-    left: 0,
-    backgroundColor: '#FFF3E0', // Light Orange
-    borderRadius: 30,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+  reactionCountMine: {
+    color: colors.brandDeep,
+  },
+  addReaction: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    zIndex: 1000,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 3.84,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: '#FFE0B2', // Slightly darker orange border
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
-  cardOverlay: {
+  addReactionText: {
+    fontFamily: fonts.sansSemibold,
+    fontSize: 13,
+    color: colors.inkSecondary,
+  },
+  pickerBackdrop: {
     position: 'absolute',
-    top: -500, // extend far up
-    bottom: -500, // extend far down
-    left: -100,
-    right: -100,
-    zIndex: 900,
-    backgroundColor: 'transparent',
+    top: -600,
+    bottom: -600,
+    left: -600,
+    right: -600,
+    zIndex: 5,
   },
-  bubbleEmoji: {
-    padding: 6,
-    borderRadius: 20,
+  picker: {
+    position: 'absolute',
+    bottom: 38,
+    right: 0,
+    flexDirection: 'row',
+    gap: 2,
+    backgroundColor: colors.surface,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs + 2,
+    borderWidth: 1,
+    borderColor: colors.border,
+    zIndex: 10,
+    ...shadows.lg,
   },
-  bubbleEmojiActive: {
-    backgroundColor: '#FFE0B2', // Orange highlight
+  pickerItem: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  bubbleEmojiText: {
-    fontSize: 24,
+  pickerItemActive: {
+    backgroundColor: colors.brandTint,
+  },
+  pickerEmoji: {
+    fontSize: 22,
   },
 });

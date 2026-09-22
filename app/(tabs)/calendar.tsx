@@ -1,255 +1,302 @@
-import { MOODS, toMoodLevel } from '@/constants/moods';
-import { borderRadius, colors, spacing, typography } from '@/constants/theme';
+import { MoodFace } from '@/components/mood';
+import { IconButton, Pill, Screen, ScreenHeader } from '@/components/ui';
+import { MOODS, MOOD_LEVELS, toMoodLevel } from '@/constants/moods';
+import { colors, fonts, radius, spacing, type } from '@/constants/theme';
 import { useEntriesStore } from '@/stores';
 import { Entry } from '@/types';
-import { addMonths, eachDayOfInterval, endOfMonth, format, getDay, isFuture, isPast, isToday, startOfMonth, subMonths } from 'date-fns';
-import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
 import {
-  Dimensions,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+  addMonths,
+  eachDayOfInterval,
+  endOfMonth,
+  format,
+  getDay,
+  isFuture,
+  isPast,
+  isSameMonth,
+  isToday,
+  startOfMonth,
+  subMonths,
+} from 'date-fns';
+import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const CALENDAR_PADDING = spacing.md;
-const DAY_SIZE = (SCREEN_WIDTH - CALENDAR_PADDING * 2) / 7;
+const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 export default function CalendarScreen() {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [currentMonth, setCurrentMonth] = useState(startOfMonth(new Date()));
   const { entries, fetchEntriesByMonth } = useEntriesStore();
   const today = new Date();
-  const isViewingCurrentMonth =
-    currentMonth.getFullYear() === today.getFullYear() &&
-    currentMonth.getMonth() >= today.getMonth();
+  const isViewingCurrentMonth = isSameMonth(currentMonth, today) || currentMonth > today;
 
   useEffect(() => {
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth() + 1;
-    fetchEntriesByMonth(year, month);
+    fetchEntriesByMonth(currentMonth.getFullYear(), currentMonth.getMonth() + 1);
   }, [currentMonth, fetchEntriesByMonth]);
 
-  const goToPreviousMonth = () => setCurrentMonth((month) => subMonths(month, 1));
+  const goToPreviousMonth = () => {
+    if (process.env.EXPO_OS === 'ios') Haptics.selectionAsync();
+    setCurrentMonth((m) => subMonths(m, 1));
+  };
   const goToNextMonth = () => {
-    if (!isViewingCurrentMonth) {
-      setCurrentMonth((month) => addMonths(month, 1));
-    }
+    if (isViewingCurrentMonth) return;
+    if (process.env.EXPO_OS === 'ios') Haptics.selectionAsync();
+    setCurrentMonth((m) => addMonths(m, 1));
   };
 
-  const monthStart = startOfMonth(currentMonth);
-  const monthEnd = endOfMonth(currentMonth);
-  const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const { cells, monthEntries } = useMemo(() => {
+    const monthStart = startOfMonth(currentMonth);
+    const monthEnd = endOfMonth(currentMonth);
+    const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+    const byDate = new Map(entries.map((e) => [e.entry_date, e]));
+    const leading: (Date | null)[] = Array(getDay(monthStart)).fill(null);
+    const list: (Date | null)[] = [...leading, ...days];
+    while (list.length % 7 !== 0) list.push(null);
 
-  const startDayOfWeek = getDay(monthStart);
-  const calendarDays = [...Array(startDayOfWeek).fill(null), ...daysInMonth];
+    const monthEntries = days
+      .map((d) => byDate.get(format(d, 'yyyy-MM-dd')))
+      .filter((e): e is Entry => Boolean(e));
 
-  const totalCells = 42;
-  while (calendarDays.length < totalCells) {
-    calendarDays.push(null);
-  }
+    return {
+      cells: list.map((date) => ({
+        date,
+        entry: date ? byDate.get(format(date, 'yyyy-MM-dd')) : undefined,
+      })),
+      monthEntries,
+    };
+  }, [currentMonth, entries]);
 
-  const getEntryForDate = (date: Date): Entry | undefined => {
-    const dateStr = format(date, 'yyyy-MM-dd');
-    return entries.find(e => e.entry_date === dateStr);
-  };
+  const summary = useMemo(() => {
+    if (monthEntries.length === 0) return null;
+    const avg = monthEntries.reduce((s, e) => s + e.mood, 0) / monthEntries.length;
+    const counts = MOOD_LEVELS.map((l) => ({ level: l, count: monthEntries.filter((e) => e.mood === l).length }));
+    const top = counts.sort((a, b) => b.count - a.count)[0];
+    return { avg, top: top.level, count: monthEntries.length };
+  }, [monthEntries]);
 
-  const handleDayPress = (date: Date) => {
-    if (isFuture(date)) return; // Can't interact with future dates
-
-    const entry = getEntryForDate(date);
+  const handleDayPress = (date: Date, entry?: Entry) => {
+    if (isFuture(date)) return;
     if (entry) {
       router.push(`/entry/${entry.id}`);
     } else {
-      router.push({
-        pathname: '/entry/[id]',
-        params: { id: 'new', date: format(date, 'yyyy-MM-dd') },
-      });
+      router.push({ pathname: '/entry/new', params: { date: format(date, 'yyyy-MM-dd') } });
     }
   };
 
-  const headerHeight = 60;
-  const availableHeight = SCREEN_HEIGHT - headerHeight - 200;
-  const rowHeight = availableHeight / 6;
-
   return (
-    <View style={styles.container}>
-      {/* Month Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={goToPreviousMonth} style={styles.navButton}>
-          <Text style={styles.navText}>←</Text>
-        </TouchableOpacity>
+    <Screen>
+      <ScreenHeader
+        eyebrow={format(currentMonth, 'yyyy')}
+        title={format(currentMonth, 'MMMM')}
+        right={
+          <View style={styles.nav}>
+            <IconButton name="chevron-back" onPress={goToPreviousMonth} label="Previous month" />
+            <View style={isViewingCurrentMonth && styles.navDisabled}>
+              <IconButton name="chevron-forward" onPress={goToNextMonth} label="Next month" />
+            </View>
+          </View>
+        }
+      />
 
-        <Text style={styles.monthTitle}>
-          {format(currentMonth, 'MMMM yyyy')}
-        </Text>
-
-        <TouchableOpacity
-          onPress={goToNextMonth}
-          style={[styles.navButton, isViewingCurrentMonth && styles.navButtonDisabled]}
-          disabled={isViewingCurrentMonth}
-        >
-          <Text style={[styles.navText, isViewingCurrentMonth && styles.navTextDisabled]}>→</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.weekdays}>
-        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
-          <Text key={`${day}-${index}`} style={styles.weekday}>
-            {day}
-          </Text>
-        ))}
-      </View>
-
-      {/* Calendar Grid */}
       <View style={styles.calendar}>
-        {calendarDays.map((date, index) => {
-          if (!date) {
-            return <View key={`empty-${index}`} style={[styles.dayCell, { height: rowHeight }]} />;
-          }
+        <View style={styles.weekdays}>
+          {WEEKDAYS.map((d, i) => (
+            <Text key={`${d}-${i}`} style={styles.weekday}>
+              {d}
+            </Text>
+          ))}
+        </View>
 
-          const entry = getEntryForDate(date);
-          const isCurrentDay = isToday(date);
-          const isFutureDay = isFuture(date);
-          const isPastDay = isPast(date) && !isCurrentDay;
-          const dayNumber = format(date, 'd');
-          const moodInfo = entry ? MOODS[toMoodLevel(entry.mood)] : null;
+        <Animated.View key={format(currentMonth, 'yyyy-MM')} entering={FadeIn.duration(200)} style={styles.grid}>
+          {cells.map(({ date, entry }, index) => {
+            if (!date) return <View key={`empty-${index}`} style={styles.cell} />;
 
-          return (
-            <TouchableOpacity
-              key={date.toISOString()}
-              style={[
-                styles.dayCell,
-                { height: rowHeight },
-                isCurrentDay && styles.todayCell,
-                isFutureDay && styles.futureCell,
-              ]}
-              onPress={() => handleDayPress(date)}
-              activeOpacity={isFutureDay ? 1 : 0.7}
-              disabled={isFutureDay}
-            >
-              <Text style={[
-                styles.dayNumber,
-                isCurrentDay && styles.todayNumber,
-                isFutureDay && styles.futureNumber,
-                isPastDay && !entry && styles.pastMissedNumber,
-                entry && styles.dayWithEntry,
-              ]}>
-                {dayNumber}
-              </Text>
+            const current = isToday(date);
+            const future = isFuture(date) && !current;
+            const missed = isPast(date) && !current && !entry;
+            const mood = entry ? toMoodLevel(entry.mood) : null;
 
-              {moodInfo && (
-                <Text style={styles.moodEmoji}>{moodInfo.emoji}</Text>
-              )}
-
-              {/* Show a subtle indicator for past days without entries */}
-              {isPastDay && !entry && (
-                <View style={styles.missedDot} />
-              )}
-            </TouchableOpacity>
-          );
-        })}
+            return (
+              <Pressable
+                key={date.toISOString()}
+                style={styles.cell}
+                onPress={() => handleDayPress(date, entry)}
+                disabled={future}
+                accessibilityRole="button"
+                accessibilityLabel={`${format(date, 'MMMM d')}${mood ? `, ${MOODS[mood].label}` : ''}`}
+              >
+                <View style={[styles.cellInner, current && styles.cellToday]}>
+                  {mood ? (
+                    <MoodFace mood={mood} size={34} />
+                  ) : (
+                    <Text
+                      style={[
+                        styles.dayNumber,
+                        future && styles.dayNumberFuture,
+                        missed && styles.dayNumberMissed,
+                        current && styles.dayNumberToday,
+                      ]}
+                    >
+                      {format(date, 'd')}
+                    </Text>
+                  )}
+                </View>
+                {mood && (
+                  <Text style={[styles.dayCaption, current && styles.dayNumberToday]}>{format(date, 'd')}</Text>
+                )}
+              </Pressable>
+            );
+          })}
+        </Animated.View>
       </View>
-    </View>
+
+      {summary ? (
+        <View style={styles.summary}>
+          <View style={styles.summaryRow}>
+            <MoodFace mood={summary.top} size={44} />
+            <View style={styles.summaryText}>
+              <Text style={styles.summaryTitle}>
+                Mostly {MOODS[summary.top].label.toLowerCase()} this month
+              </Text>
+              <Text style={styles.summarySub}>
+                {summary.count} check-in{summary.count === 1 ? '' : 's'} · average {summary.avg.toFixed(1)} / 5
+              </Text>
+            </View>
+          </View>
+          <View style={styles.legend}>
+            {MOOD_LEVELS.map((level) => (
+              <View key={level} style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: MOODS[level].color }]} />
+                <Text style={styles.legendText}>{MOODS[level].label}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : (
+        <View style={styles.summaryEmpty}>
+          <Pill label="No check-ins yet this month" tone="muted" icon="calendar-outline" />
+          <Text style={styles.summaryHint}>Tap any past day to add one.</Text>
+        </View>
+      )}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
+  nav: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    gap: spacing.sm,
   },
-  navButton: {
-    padding: spacing.sm,
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  navText: {
-    fontSize: 24,
-    color: colors.primary[500],
-    fontWeight: typography.weights.bold,
-  },
-  navButtonDisabled: {
+  navDisabled: {
     opacity: 0.35,
   },
-  navTextDisabled: {
-    color: colors.gray[400],
-  },
-  monthTitle: {
-    fontSize: typography.sizes.xl,
-    fontWeight: typography.weights.bold,
-    color: colors.text.primary,
+  calendar: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderCurve: 'continuous',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: spacing.sm,
   },
   weekdays: {
     flexDirection: 'row',
-    paddingHorizontal: CALENDAR_PADDING,
-    marginBottom: spacing.xs,
   },
   weekday: {
-    width: DAY_SIZE,
-    textAlign: 'center',
-    fontSize: typography.sizes.xs,
-    fontWeight: typography.weights.bold,
-    color: colors.text.muted,
-  },
-  calendar: {
     flex: 1,
+    textAlign: 'center',
+    ...type.caption,
+    fontFamily: fonts.sansSemibold,
+  },
+  grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: CALENDAR_PADDING,
   },
-  dayCell: {
-    width: DAY_SIZE,
+  cell: {
+    width: `${100 / 7}%`,
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+    gap: 2,
+  },
+  cellInner: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.sm,
   },
-  todayCell: {
-    backgroundColor: colors.primary[100],
-    borderRadius: borderRadius.md,
-  },
-  futureCell: {
-    opacity: 0.8,
+  cellToday: {
+    borderWidth: 2,
+    borderColor: colors.brand,
   },
   dayNumber: {
-    fontSize: typography.sizes.lg,
-    color: colors.text.primary,
-    fontWeight: typography.weights.semibold,
+    fontFamily: fonts.sansMedium,
+    fontSize: 15,
+    color: colors.ink,
   },
-  todayNumber: {
-    color: colors.primary[600],
-    fontWeight: typography.weights.bold,
+  dayNumberToday: {
+    color: colors.brand,
+    fontFamily: fonts.sansBold,
   },
-  futureNumber: {
-    color: colors.gray[400],
-    fontWeight: typography.weights.regular,
+  dayNumberFuture: {
+    color: colors.inkMuted,
+    opacity: 0.6,
   },
-  pastMissedNumber: {
-    color: colors.gray[400],
+  dayNumberMissed: {
+    color: colors.inkMuted,
   },
-  dayWithEntry: {
-    color: colors.text.primary,
-    fontWeight: typography.weights.bold,
+  dayCaption: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 10,
+    lineHeight: 12,
+    color: colors.inkMuted,
   },
-  moodEmoji: {
-    fontSize: 24,
-    marginTop: spacing.xs,
+  summary: {
+    marginTop: spacing.lg,
+    gap: spacing.md,
   },
-  missedDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.gray[300],
-    marginTop: spacing.xs,
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s12,
+  },
+  summaryText: {
+    flex: 1,
+    gap: 2,
+  },
+  summaryTitle: {
+    ...type.title3,
+  },
+  summarySub: {
+    ...type.footnote,
+  },
+  legend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.s12,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 3,
+  },
+  legendText: {
+    ...type.caption,
+  },
+  summaryEmpty: {
+    marginTop: spacing.lg,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  summaryHint: {
+    ...type.footnote,
+    color: colors.inkMuted,
   },
 });

@@ -61,6 +61,21 @@ export async function getCurrentUser(): Promise<User | null> {
   return createdProfile;
 }
 
+export async function updateProfile(input: { display_name?: string | null }): Promise<User> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ ...input, updated_at: new Date().toISOString() })
+    .eq('id', user.id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
 export async function resetPassword(email: string) {
   const { error } = await supabase.auth.resetPasswordForEmail(email);
   if (error) throw error;

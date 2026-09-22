@@ -1,8 +1,19 @@
 import { FeedEntry, UserCard } from '@/components/social';
-import { borderRadius, colors, spacing, typography } from '@/constants/theme';
+import { EmptyState, Screen, ScreenHeader } from '@/components/ui';
+import { colors, fonts, radius, spacing, type } from '@/constants/theme';
 import { useAuthStore, useSocialStore } from '@/stores';
-import React, { useEffect, useState } from 'react';
-import { Alert, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
 export default function SocialScreen() {
   const {
@@ -17,58 +28,54 @@ export default function SocialScreen() {
     clearSearchResults,
     followUser,
     unfollowUser,
-    reactToEntry
+    reactToEntry,
   } = useSocialStore();
 
   const { user: currentUser } = useAuthStore();
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'feed' | 'search'>('feed');
+  const [mode, setMode] = useState<'feed' | 'search'>('feed');
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
-    fetchFeed();
+    fetchFeed().finally(() => setHasLoadedOnce(true));
   }, [fetchFeed]);
 
   useEffect(() => {
-    if (currentUser?.id) {
-      fetchFollowing(currentUser.id);
-    }
+    if (currentUser?.id) fetchFollowing(currentUser.id);
   }, [currentUser?.id, fetchFollowing]);
 
-  // Debounce search
   useEffect(() => {
     const query = searchQuery.trim();
-
     if (query.length > 2) {
-      const timer = setTimeout(() => {
-        searchUsers(query);
-      }, 500);
+      const timer = setTimeout(() => searchUsers(query), 400);
       return () => clearTimeout(timer);
     }
-
     clearSearchResults();
   }, [clearSearchResults, searchQuery, searchUsers]);
 
-  const handleSearchFocus = () => {
-    setActiveTab('search');
+  const openSearch = () => {
+    setMode('search');
+    requestAnimationFrame(() => inputRef.current?.focus());
   };
 
-  const handleCancelSearch = () => {
+  const closeSearch = () => {
     setSearchQuery('');
-    setActiveTab('feed');
+    setMode('feed');
+    inputRef.current?.blur();
   };
 
   const refreshFollowing = async () => {
-    if (currentUser?.id) {
-      await fetchFollowing(currentUser.id);
-    }
+    if (currentUser?.id) await fetchFollowing(currentUser.id);
   };
 
   const handleFollow = async (userId: string) => {
     try {
       await followUser(userId);
       await refreshFollowing();
+      fetchFeed();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to follow user');
+      Alert.alert('Could not follow', error.message || 'Please try again.');
     }
   };
 
@@ -76,142 +83,177 @@ export default function SocialScreen() {
     try {
       await unfollowUser(userId);
       await refreshFollowing();
+      fetchFeed();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to unfollow user');
+      Alert.alert('Could not unfollow', error.message || 'Please try again.');
     }
   };
 
+  const showInitialLoading = isLoading && !hasLoadedOnce && feed.length === 0;
+
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Social</Text>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search friends..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          onFocus={handleSearchFocus}
-        />
-        {activeTab === 'search' && (
-          <TouchableOpacity onPress={handleCancelSearch}>
-            <Text style={styles.cancelText}>Cancel</Text>
-          </TouchableOpacity>
+    <Screen
+      refreshControl={
+        mode === 'feed' ? (
+          <RefreshControl refreshing={isLoading && hasLoadedOnce} onRefresh={fetchFeed} tintColor={colors.brand} />
+        ) : undefined
+      }
+    >
+      <ScreenHeader eyebrow="Friends" title={mode === 'search' ? 'Find people' : 'Feed'} />
+
+      <View style={styles.searchRow}>
+        <View style={[styles.search, mode === 'search' && styles.searchActive]}>
+          <Ionicons name="search" size={18} color={mode === 'search' ? colors.brand : colors.inkMuted} />
+          <TextInput
+            ref={inputRef}
+            style={styles.searchInput}
+            placeholder="Search by name or email"
+            placeholderTextColor={colors.inkMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onFocus={openSearch}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+            selectionColor={colors.brand}
+          />
+          {searchQuery.length > 0 && (
+            <Pressable onPress={() => setSearchQuery('')} hitSlop={8} accessibilityLabel="Clear search">
+              <Ionicons name="close-circle" size={18} color={colors.inkMuted} />
+            </Pressable>
+          )}
+        </View>
+        {mode === 'search' && (
+          <Pressable onPress={closeSearch} hitSlop={8} accessibilityRole="button">
+            <Text style={styles.cancel}>Cancel</Text>
+          </Pressable>
         )}
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={fetchFeed} />
-        }
-      >
-        {activeTab === 'search' ? (
-          <View>
-            <Text style={styles.sectionTitle}>Search Results</Text>
-            {isSearching ? (
-              <Text style={styles.loadingText}>Searching...</Text>
-            ) : searchResults.length === 0 && searchQuery.length > 2 ? (
-              <Text style={styles.emptyText}>No users found.</Text>
-            ) : (
-              searchResults.map(user => (
+      {mode === 'search' ? (
+        <View style={styles.results}>
+          {searchQuery.trim().length <= 2 ? (
+            <View style={styles.hint}>
+              <Text style={styles.hintText}>Type at least 3 characters to search.</Text>
+              {following.length > 0 && (
+                <>
+                  <Text style={styles.followingTitle}>Following</Text>
+                  <View style={styles.list}>
+                    {following.map((u, i) => (
+                      <UserCard
+                        key={u.id}
+                        user={u}
+                        isFollowing
+                        onUnfollow={() => handleUnfollow(u.id)}
+                        last={i === following.length - 1}
+                      />
+                    ))}
+                  </View>
+                </>
+              )}
+            </View>
+          ) : isSearching ? (
+            <ActivityIndicator color={colors.brand} style={styles.spinner} />
+          ) : searchResults.length === 0 ? (
+            <EmptyState icon="person-outline" title="No one found" message="Try their name or the email they signed up with." />
+          ) : (
+            <View style={styles.list}>
+              {searchResults.map((u, i) => (
                 <UserCard
-                  key={user.id}
-                  user={user}
-                  isFollowing={following.some((followedUser) => followedUser.id === user.id)}
-                  onFollow={() => handleFollow(user.id)}
-                  onUnfollow={() => handleUnfollow(user.id)}
+                  key={u.id}
+                  user={u}
+                  isFollowing={following.some((f) => f.id === u.id)}
+                  onFollow={() => handleFollow(u.id)}
+                  onUnfollow={() => handleUnfollow(u.id)}
+                  last={i === searchResults.length - 1}
                 />
-              ))
-            )}
-          </View>
-        ) : (
-          <View>
-            {feed.length === 0 && !isLoading ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyText}>Your feed is empty.</Text>
-                <Text style={styles.emptySubtext}>Follow friends to see their daily recaps!</Text>
-                <TouchableOpacity onPress={() => setActiveTab('search')}>
-                  <Text style={styles.linkText}>Find friends</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              feed.map(entry => (
-                <FeedEntry
-                  key={entry.id}
-                  entry={entry}
-                  onReact={(emoji) => reactToEntry(entry.id, emoji)}
-                />
-              ))
-            )}
-          </View>
-        )}
-      </ScrollView>
-    </View>
+              ))}
+            </View>
+          )}
+        </View>
+      ) : showInitialLoading ? (
+        <ActivityIndicator color={colors.brand} style={styles.spinner} />
+      ) : feed.length === 0 ? (
+        <EmptyState
+          icon="people-outline"
+          title="Your feed is quiet"
+          message="Follow a few friends to see their daily recaps here. Public entries show up too."
+          action={{ label: 'Find friends', onPress: openSearch }}
+          style={styles.empty}
+        />
+      ) : (
+        <View style={styles.feed}>
+          {feed.map((entry) => (
+            <FeedEntry key={entry.id} entry={entry} onReact={(emoji) => reactToEntry(entry.id, emoji)} />
+          ))}
+        </View>
+      )}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s12,
+    marginBottom: spacing.md,
+  },
+  search: {
     flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    padding: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[100],
-    gap: spacing.md,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    height: 46,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  title: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.text.primary,
+  searchActive: {
+    borderColor: colors.brand,
   },
   searchInput: {
-    backgroundColor: colors.gray[100],
-    padding: spacing.md,
-    borderRadius: borderRadius.md,
-    fontSize: typography.sizes.md,
+    flex: 1,
+    fontFamily: fonts.sans,
+    fontSize: 15,
+    color: colors.ink,
+    height: '100%',
   },
-  cancelText: {
-    color: colors.primary[600],
-    fontWeight: '600',
-    textAlign: 'right',
+  cancel: {
+    ...type.callout,
+    color: colors.brandStrong,
   },
-  content: {
-    padding: spacing.lg,
+  results: {
+    gap: spacing.md,
   },
-  sectionTitle: {
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.bold,
-    marginBottom: spacing.md,
-    color: colors.text.primary,
+  hint: {
+    gap: spacing.md,
   },
-  loadingText: {
-    textAlign: 'center',
-    color: colors.text.secondary,
+  hintText: {
+    ...type.footnote,
+    color: colors.inkMuted,
+  },
+  followingTitle: {
+    ...type.label,
+    marginTop: spacing.sm,
+  },
+  list: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  spinner: {
+    marginTop: spacing.xxl,
+  },
+  empty: {
     marginTop: spacing.xl,
   },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 60,
-  },
-  emptyText: {
-    fontSize: typography.sizes.lg,
-    fontWeight: '600',
-    color: colors.text.muted,
-    marginBottom: spacing.sm,
-  },
-  emptySubtext: {
-    fontSize: typography.sizes.md,
-    color: colors.text.secondary,
-    marginBottom: spacing.lg,
-    textAlign: 'center',
-  },
-  linkText: {
-    color: colors.primary[600],
-    fontWeight: '600',
-    fontSize: typography.sizes.md,
+  feed: {
+    gap: spacing.s12,
   },
 });

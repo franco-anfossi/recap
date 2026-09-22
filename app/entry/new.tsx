@@ -1,16 +1,11 @@
 import { EntryForm } from '@/components/entry';
-import { colors, spacing, typography } from '@/constants/theme';
+import { ModalHeader } from '@/components/ui';
+import { colors, spacing, type } from '@/constants/theme';
 import { useEntriesStore } from '@/stores';
-import { format, isFuture, isValid, parseISO } from 'date-fns';
+import { format, isFuture, isToday, isValid, parseISO } from 'date-fns';
 import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import {
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 function getSafeEntryDate(date: string | undefined): string {
   if (!date) return format(new Date(), 'yyyy-MM-dd');
@@ -26,22 +21,23 @@ function getSafeEntryDate(date: string | undefined): string {
 export default function NewEntryScreen() {
   const { date } = useLocalSearchParams<{ date?: string }>();
   const entryDate = getSafeEntryDate(date);
+  const parsed = parseISO(entryDate);
   const existingEntry = useEntriesStore((state) =>
     state.entries.find((entry) => entry.entry_date === entryDate)
   );
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backText}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>{existingEntry ? 'Edit Entry' : 'New Entry'}</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+  const header = (
+    <View style={styles.dateBlock}>
+      <Text style={styles.eyebrow}>{existingEntry ? 'Editing' : isToday(parsed) ? 'Today' : 'Backdated entry'}</Text>
+      <Text style={styles.date}>{format(parsed, 'EEEE, MMMM d')}</Text>
+    </View>
+  );
 
-      <EntryForm date={entryDate} onSuccess={() => router.back()} />
-    </SafeAreaView>
+  return (
+    <View style={styles.container}>
+      <ModalHeader title={existingEntry ? 'Edit entry' : 'New entry'} onClose={() => router.back()} />
+      <EntryForm date={entryDate} onSuccess={() => router.back()} header={header} />
+    </View>
   );
 }
 
@@ -50,29 +46,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[200],
+  dateBlock: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    gap: spacing.xs,
   },
-  backButton: {
-    padding: spacing.sm,
+  eyebrow: {
+    ...type.label,
+    color: colors.brand,
   },
-  backText: {
-    color: colors.primary[600],
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.medium,
-  },
-  title: {
-    color: colors.text.primary,
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.bold,
-  },
-  headerSpacer: {
-    width: 64,
+  date: {
+    ...type.title1,
   },
 });

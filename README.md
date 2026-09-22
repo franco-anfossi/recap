@@ -1,50 +1,37 @@
-# Welcome to your Expo app 👋
+# recap.
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A daily mood journal. One honest check-in a day, a calendar that shows the shape of your weeks, insights built from real entries, and a year-end recap.
 
-## Get started
+Built with Expo Router, React Native, Zustand and Supabase.
 
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Run it
 
 ```bash
-npm run reset-project
+npm install
+cp .env.example .env   # add your Supabase URL + anon key
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Press `i` for the iOS simulator, `a` for Android, `w` for web.
 
-## Learn more
+## Design system
 
-To learn more about developing your project with Expo, look at the following resources:
+Everything visual comes from `constants/theme.ts` (colors, spacing, radius, type ramp, shadows, motion) and `constants/moods.ts` (the five mood colors). Screens compose the primitives in `components/ui` (`Button`, `Input`, `Card`, `Screen`, `ScreenHeader`, `ModalHeader`, `Chip`, `Segmented`, `StatTile`, `ListRow`, `EmptyState`, `Wordmark`) and the signature `MoodFace` glyph in `components/mood`.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- Headlines: Fraunces (serif). Body and UI: DM Sans.
+- Brand: ember orange on warm paper. Moods run brick → coral → amber → olive → jade.
+- Light-only UI (`userInterfaceStyle: light`).
 
-## Join the community
+## Flow
 
-Join our community of developers creating universal apps.
+1. `app/(auth)/welcome.tsx` — first-launch intro (shown once per device).
+2. `app/(auth)/login.tsx`, `register.tsx`.
+3. `app/setup.tsx` — after sign-up: name, first check-in, one intention.
+4. `app/(tabs)` — Today, Calendar, Insights, Friends, You.
+5. `app/entry/*`, `app/summary/[year].tsx` — modals.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Routing between these lives in `app/_layout.tsx`; onboarding state is persisted in `stores/onboarding.store.ts`.
+
+## Database
+
+Migrations live in `supabase/migrations`. `supabase/seeds/seed.sql` creates `seed_test_*@recap.app` accounts (password `password123`) for local testing.

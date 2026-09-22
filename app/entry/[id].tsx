@@ -1,27 +1,32 @@
-import { Button, Card } from '@/components/ui';
+import { MoodFace } from '@/components/mood';
+import { Button, Chip, IconButton, ModalHeader, Pill } from '@/components/ui';
 import { MOODS, toMoodLevel } from '@/constants/moods';
-import { borderRadius, colors, spacing, typography } from '@/constants/theme';
-import { useEntriesStore } from '@/stores';
-import { Entry } from '@/types';
+import { colors, fonts, radius, spacing, type } from '@/constants/theme';
+import * as goalsApi from '@/lib/api/goals';
+import { useEntriesStore, useGoalsStore } from '@/stores';
+import { Entry, Visibility } from '@/types';
+import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const VISIBILITY: Record<Visibility, { label: string; icon: keyof typeof Ionicons.glyphMap }> = {
+  private: { label: 'Only you', icon: 'lock-closed' },
+  friends: { label: 'Friends', icon: 'people' },
+  public: { label: 'Public', icon: 'globe-outline' },
+};
 
 export default function EntryDetailScreen() {
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { entries, deleteEntry, fetchEntryById } = useEntriesStore();
+  const { goals, fetchGoals } = useGoalsStore();
   const [entry, setEntry] = useState<Entry | null>(null);
   const [isFetchingEntry, setIsFetchingEntry] = useState(true);
+  const [linkedGoalIds, setLinkedGoalIds] = useState<string[]>([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -42,7 +47,6 @@ export default function EntryDetailScreen() {
 
       setIsFetchingEntry(true);
       const fetched = await fetchEntryById(id);
-
       if (isMounted) {
         setEntry(fetched);
         setIsFetchingEntry(false);
@@ -50,131 +54,121 @@ export default function EntryDetailScreen() {
     };
 
     loadEntry();
-
     return () => {
       isMounted = false;
     };
   }, [id, entries, fetchEntryById]);
 
+  useEffect(() => {
+    if (!entry) return;
+    fetchGoals(parseISO(entry.entry_date).getFullYear());
+    goalsApi
+      .getGoalsForEntry(entry.id)
+      .then(setLinkedGoalIds)
+      .catch(() => setLinkedGoalIds([]));
+  }, [entry, fetchGoals]);
+
   const handleDelete = () => {
-    Alert.alert(
-      'Delete Entry',
-      'Are you sure you want to delete this entry? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            if (entry) {
-              await deleteEntry(entry.id);
-              router.back();
-            }
-          },
+    Alert.alert('Delete this entry?', 'This can’t be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          if (entry) {
+            await deleteEntry(entry.id);
+            router.back();
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const handleEdit = () => {
     if (!entry) return;
-
-    router.push({
-      pathname: '/entry/[id]',
-      params: { id: 'new', date: entry.entry_date },
-    });
+    router.push({ pathname: '/entry/new', params: { date: entry.entry_date } });
   };
 
   if (isFetchingEntry) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.notFound}>
-          <ActivityIndicator color={colors.primary[600]} />
-          <Text style={styles.loadingText}>Loading entry...</Text>
+      <View style={styles.container}>
+        <ModalHeader />
+        <View style={styles.centered}>
+          <ActivityIndicator color={colors.brand} />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   if (!entry) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.notFound}>
-          <Text style={styles.notFoundText}>Entry not found</Text>
-          <Button title="Go Back" onPress={() => router.back()} variant="secondary" />
+      <View style={styles.container}>
+        <ModalHeader />
+        <View style={styles.centered}>
+          <Text style={styles.notFound}>This entry isn’t available.</Text>
+          <Button title="Go back" onPress={() => router.back()} variant="secondary" />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
-  const moodInfo = MOODS[toMoodLevel(entry.mood)];
-  const formattedDate = format(parseISO(entry.entry_date), 'EEEE, MMMM d, yyyy');
+  const level = toMoodLevel(entry.mood);
+  const mood = MOODS[level];
+  const date = parseISO(entry.entry_date);
+  const linkedGoals = goals.filter((g) => linkedGoalIds.includes(g.id));
+  const visibility = VISIBILITY[entry.visibility || 'private'];
+  const wasEdited = entry.updated_at !== entry.created_at;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backText}>← Back</Text>
-        </TouchableOpacity>
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={handleEdit} style={styles.editButton}>
-            <Text style={styles.editText}>Edit</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
-            <Text style={styles.deleteText}>Delete</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+    <View style={styles.container}>
+      <ModalHeader
+        right={
+          <>
+            <IconButton name="create-outline" onPress={handleEdit} label="Edit entry" />
+            <IconButton name="trash-outline" onPress={handleDelete} label="Delete entry" tone="danger" />
+          </>
+        }
+      />
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.date}>{formattedDate}</Text>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]} showsVerticalScrollIndicator={false}>
+        <Animated.View entering={FadeInDown.duration(350)} style={[styles.hero, { backgroundColor: mood.tint }]}>
+          <MoodFace mood={level} size={112} />
+          <Text style={[styles.heroLabel, { color: mood.ink }]}>{mood.label}</Text>
+          <Text style={[styles.heroDate, { color: mood.ink }]}>{format(date, 'EEEE, MMMM d, yyyy')}</Text>
+        </Animated.View>
 
-        <Card variant="elevated" padding="lg" style={styles.moodCard}>
-          <View style={styles.moodHeader}>
-            <Text style={styles.moodEmoji}>{moodInfo.emoji}</Text>
-            <View style={styles.moodInfo}>
-              <Text style={[styles.moodLabel, { color: moodInfo.color }]}>
-                {moodInfo.label}
-              </Text>
-              <Text style={styles.moodLevel}>Mood level: {entry.mood}/5</Text>
-            </View>
-          </View>
-        </Card>
-
-        {entry.note && (
-          <Card variant="outlined" padding="lg" style={styles.noteCard}>
-            <Text style={styles.noteTitle}>Note</Text>
-            <Text style={styles.noteText}>{entry.note}</Text>
-          </Card>
+        {entry.note ? (
+          <Animated.View entering={FadeInDown.delay(60).duration(350)} style={styles.noteCard}>
+            <Text style={styles.noteQuote}>“</Text>
+            <Text style={styles.note}>{entry.note}</Text>
+          </Animated.View>
+        ) : (
+          <Animated.View entering={FadeInDown.delay(60).duration(350)} style={styles.noNote}>
+            <Text style={styles.noNoteText}>No note for this day.</Text>
+            <Button title="Add a note" variant="soft" size="sm" onPress={handleEdit} />
+          </Animated.View>
         )}
 
-        {entry.video_url && (
-          <Card variant="outlined" padding="lg" style={styles.videoCard}>
-            <Text style={styles.noteTitle}>Video</Text>
-            <View style={styles.videoPlaceholder}>
-              <Text style={styles.videoIcon}>🎬</Text>
-              <Text style={styles.videoText}>Video attached</Text>
-              {entry.video_duration_seconds && (
-                <Text style={styles.videoDuration}>
-                  {entry.video_duration_seconds}s
-                </Text>
-              )}
+        {linkedGoals.length > 0 && (
+          <Animated.View entering={FadeInDown.delay(120).duration(350)} style={styles.block}>
+            <Text style={styles.blockLabel}>Moved forward on</Text>
+            <View style={styles.chips}>
+              {linkedGoals.map((g) => (
+                <Chip key={g.id} label={g.title} selected icon={g.is_completed ? 'checkmark-done' : 'flag-outline'} />
+              ))}
             </View>
-          </Card>
+          </Animated.View>
         )}
 
-        <View style={styles.metadata}>
-          <Text style={styles.metadataText}>
-            Created: {format(new Date(entry.created_at), 'MMM d, yyyy h:mm a')}
+        <Animated.View entering={FadeInDown.delay(160).duration(350)} style={styles.meta}>
+          <Pill label={visibility.label} icon={visibility.icon} tone="muted" />
+          <Text style={styles.metaText}>
+            Logged {format(new Date(entry.created_at), 'MMM d, h:mm a')}
+            {wasEdited ? ` · edited ${format(new Date(entry.updated_at), 'MMM d, h:mm a')}` : ''}
           </Text>
-          {entry.updated_at !== entry.created_at && (
-            <Text style={styles.metadataText}>
-              Updated: {format(new Date(entry.updated_at), 'MMM d, yyyy h:mm a')}
-            </Text>
-          )}
-        </View>
+        </Animated.View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -183,139 +177,88 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[200],
-  },
-  backButton: {
-    padding: spacing.sm,
-  },
-  backText: {
-    fontSize: typography.sizes.md,
-    color: colors.primary[600],
-    fontWeight: typography.weights.medium,
-  },
-  deleteButton: {
-    padding: spacing.sm,
-  },
-  editButton: {
-    padding: spacing.sm,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  editText: {
-    fontSize: typography.sizes.md,
-    color: colors.primary[600],
-    fontWeight: typography.weights.medium,
-  },
-  deleteText: {
-    fontSize: typography.sizes.md,
-    color: colors.error,
-    fontWeight: typography.weights.medium,
-  },
-  content: {
-    padding: spacing.lg,
-  },
-  date: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.text.primary,
-    textAlign: 'center',
-    marginBottom: spacing.lg,
-  },
-  moodCard: {
-    marginBottom: spacing.lg,
-  },
-  moodHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  moodEmoji: {
-    fontSize: 48,
-    marginRight: spacing.md,
-  },
-  moodInfo: {
+  centered: {
     flex: 1,
-  },
-  moodLabel: {
-    fontSize: typography.sizes.xl,
-    fontWeight: typography.weights.bold,
-  },
-  moodLevel: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.secondary,
-    marginTop: spacing.xs,
-  },
-  noteCard: {
-    marginBottom: spacing.lg,
-  },
-  noteTitle: {
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.semibold,
-    color: colors.text.secondary,
-    marginBottom: spacing.sm,
-  },
-  noteText: {
-    fontSize: typography.sizes.md,
-    color: colors.text.primary,
-    lineHeight: 24,
-  },
-  videoCard: {
-    marginBottom: spacing.lg,
-  },
-  videoPlaceholder: {
-    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.gray[100],
-    padding: spacing.md,
-    borderRadius: borderRadius.md,
-  },
-  videoIcon: {
-    fontSize: 24,
-    marginRight: spacing.sm,
-  },
-  videoText: {
-    flex: 1,
-    fontSize: typography.sizes.md,
-    color: colors.text.primary,
-  },
-  videoDuration: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.secondary,
-  },
-  metadata: {
-    marginTop: spacing.lg,
-    paddingTop: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.gray[200],
-  },
-  metadataText: {
-    fontSize: typography.sizes.sm,
-    color: colors.text.muted,
-    marginBottom: spacing.xs,
-  },
-  notFound: {
-    flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
+    gap: spacing.md,
     padding: spacing.xl,
   },
-  notFoundText: {
-    fontSize: typography.sizes.lg,
-    color: colors.text.secondary,
-    marginBottom: spacing.lg,
+  notFound: {
+    ...type.subhead,
   },
-  loadingText: {
-    fontSize: typography.sizes.md,
-    color: colors.text.secondary,
+  content: {
+    paddingHorizontal: spacing.screen,
+    paddingTop: spacing.sm,
+    gap: spacing.md,
+  },
+  hero: {
+    alignItems: 'center',
+    borderRadius: radius.xl,
+    borderCurve: 'continuous',
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
+  },
+  heroLabel: {
+    fontFamily: fonts.displayBold,
+    fontSize: 32,
+    lineHeight: 36,
+    letterSpacing: -0.8,
+    marginTop: spacing.sm,
+  },
+  heroDate: {
+    ...type.callout,
+    opacity: 0.8,
+  },
+  noteCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderCurve: 'continuous',
+    padding: spacing.s20,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  noteQuote: {
+    fontFamily: fonts.displayBold,
+    fontSize: 40,
+    lineHeight: 36,
+    color: colors.brandSoft,
+    marginBottom: -spacing.sm,
+  },
+  note: {
+    fontFamily: fonts.displayItalic,
+    fontSize: 19,
+    lineHeight: 30,
+    color: colors.ink,
+  },
+  noNote: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  noNoteText: {
+    ...type.subhead,
+    color: colors.inkMuted,
+  },
+  block: {
+    gap: spacing.sm,
+  },
+  blockLabel: {
+    ...type.label,
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  meta: {
+    alignItems: 'center',
+    gap: spacing.sm,
     marginTop: spacing.md,
+  },
+  metaText: {
+    ...type.caption,
+    textAlign: 'center',
   },
 });
